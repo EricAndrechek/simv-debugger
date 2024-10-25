@@ -1,0 +1,45 @@
+VariableDisplay {
+    layout: horizontal;
+    background: $boost;
+    height: 3;
+    margin: 1;
+    width: auto;
+}
+
+VariableName, VariableValue {
+    padding: 1;
+    min-width: 20;
+    width: auto;
+}
+
+VariableRemove {
+    padding: 0;
+    margin: 0;
+    width: auto;
+    link-color: white;
+    link-background: red;
+    link-style-hover: bold;
+    link-color-hover: white;
+    link-background-hover: darkred;
+}
+
+VariableDisplayList {
+    background: $boost;
+    margin: 1;
+    padding: 1;
+    width: auto;
+    max-width: 60;
+}
+
+ClockDisplay {
+    margin: 1;
+    padding: 1;
+    background: $boost;
+    content-align: right top;
+    width: auto;
+}
+
+Spacer {
+    width: auto;
+    height: auto;
+}

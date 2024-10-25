@@ -1,0 +1,6 @@
+{
+    "watching": {
+        "clock": "bool",
+        "reset": "bool"
+    }
+}
