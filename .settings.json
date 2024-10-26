@@ -1,6 +1,1 @@
-{
-    "watching": {
-        "clock": "bool",
-        "reset": "bool"
-    }
-}
+{"watching": {"reset": "", "clock": "", "mem_wb": "", "clock_count": ""}}

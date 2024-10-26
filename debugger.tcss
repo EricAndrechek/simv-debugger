@@ -1,45 +1,95 @@
-VariableDisplay {
-    layout: horizontal;
-    background: $boost;
-    height: 3;
-    margin: 1;
-    width: auto;
-}
-
-VariableName, VariableValue {
-    padding: 1;
-    min-width: 20;
-    width: auto;
-}
-
-VariableRemove {
+Screen {
+    layout: grid;
+    grid-size: 3;
     padding: 0;
     margin: 0;
-    width: auto;
-    link-color: white;
-    link-background: red;
-    link-style-hover: bold;
-    link-color-hover: white;
-    link-background-hover: darkred;
 }
 
-VariableDisplayList {
-    background: $boost;
+#left-pane {
+    row-span: 3;
+    background: $panel;
+    overflow-y: auto;
+    overflow-x: hidden;
+    layout: vertical;
+    width: 100%;
+    height: 100%;
     margin: 1;
     padding: 1;
-    width: auto;
-    max-width: 60;
 }
 
-ClockDisplay {
+#left-pane > Static {
+    color: auto;
+    margin-left: 1;
+}
+
+#left-pane > Label {
+    width: 100%;
     margin: 1;
-    padding: 1;
-    background: $boost;
-    content-align: right top;
-    width: auto;
 }
 
-Spacer {
-    width: auto;
+#left-pane > #variable_list > VariableDisplay {
+    width: 100%;
+    background: $boost;
     height: auto;
+    margin-top: 1;
+    layout: horizontal;
+
+    .variable_content {
+        height: auto;
+        layout: horizontal;
+
+        .variable_name {
+            width: auto;
+            margin-left: 1;
+            margin-right: 1;
+            padding: 1;
+        }
+        .variable_value {
+            width: auto;
+            margin-right: 1;
+            padding: 1;
+        }
+    }
+
+    .variable_remove {
+        height: auto;
+        align: right middle;
+        width: auto;
+
+        Checkbox {
+        }
+    }
+}
+
+#main-screen {
+    column-span: 2;
+    row-span: 3;
+    height: 100%;
+    width: 100%;
+
+    ClockDisplay {
+        height: auto;
+        background: $boost;
+        padding: 1;
+        margin: 1;
+    }
+
+    #clock-controls {
+        width: 40;
+        height: 6;
+
+        layout: grid;
+        grid-size: 3 2;
+        grid-gutter: 0 1;
+
+        background: $boost;
+
+        margin: 1;
+
+        Button {
+            width: auto;
+            height: 100%;
+            background: $boost;
+        }
+    }
 }
