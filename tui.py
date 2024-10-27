@@ -172,6 +172,13 @@ class SIMVApp(App):
         ("d", "toggle_dark", "Toggle dark mode"),
     ]
 
+    def __init__(self, ucli=None):
+        super().__init__()
+
+        self.ucli = ucli
+
+        self.dark = settings.get("dark", False)
+
     def on_mount(self):
         def run_on_clock_change(clock_value: int):
             self.refresh_bindings()
@@ -214,20 +221,42 @@ class SIMVApp(App):
     def action_quit(self) -> None:
         """An action to quit the app."""
         # quit and cleanup settings and ucli
+        if self.ucli:
+            self.ucli.close()
         self.exit()
 
     # TODO: can seperate into different functions with @on(Button.Pressed, CSS Selector)
     async def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "previous_clock":
-            self.query_one(ClockDisplay).clock -= 1
+            if self.ucli:
+                clock = await self.ucli.clock_cycle(-1, blocking=True)
+                self.query_one(ClockDisplay).clock = clock
+            else:
+                # used for testing without UCLI
+                self.query_one(ClockDisplay).clock -= 1
         elif event.button.id == "next_clock":
-            self.query_one(ClockDisplay).clock += 1
+            if self.ucli:
+                clock = await self.ucli.clock_cycle(-1, blocking=True)
+                self.query_one(ClockDisplay).clock = clock
+            else:
+                # used for testing without UCLI
+                self.query_one(ClockDisplay).clock += 1
         elif event.button.id == "previous_line":
-            self.query_one("#log").write(Syntax("always @(posedge clock) begin\n", "verilog"))
+            if self.ucli:
+                # TODO: needs checkpoint to go back
+                self.query_one("#log").write(Syntax("end\n", "verilog"))
+            else:
+                self.query_one("#log").write(Syntax("always @(posedge clock) begin\n", "verilog"))
         elif event.button.id == "next_line":
-            self.query_one("#log").write(Syntax("end\n", "verilog"))
+            if self.ucli:
+                code = await self.ucli.read("step", blocking=True, run=True)
+                self.query_one("#log").write(Syntax("end\n", "verilog"))
+            else:
+                self.query_one("#log").write(Syntax("end\n", "verilog"))
 
 
 if __name__ == "__main__":
+
+    # if running on its own, don't hook in a UCLI
     app = SIMVApp()
     app.run()

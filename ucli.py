@@ -28,7 +28,7 @@ class UCLI():
 
         self.thread = None
         self.stop = False
-        
+
     def start(self):
         """Initialize the simulation and start the UCLI loop, blocking until ready"""
 
@@ -42,9 +42,9 @@ class UCLI():
         while self.commands or self.running_command:
             time.sleep(BUSY_WAIT_TIME)
         self.output.clear()
-    
+
     # -------------------- public methods --------------------
-    
+
     def run(self, cmd):
         """Run a custom command in the UCLI"""
 
@@ -53,7 +53,7 @@ class UCLI():
         # if there is no command currently running, just run it now
         if self.waitingForPrompt:
             self._run()
-    
+
     def read(self, command, blocking=False, run=False):
         """
         Read the output of a command,
@@ -67,12 +67,12 @@ class UCLI():
         if blocking:
             while command not in self.output:
                 time.sleep(BUSY_WAIT_TIME)
-        
+
         # this will remove the command from the output dictionary
         # do we want this behavior to allow blocking, or
         # should we allow "caching" of the output for repeated access?
         return self.output.pop(command)
-    
+
     def get_clock(self):
         """Special function to get the clock cycle and parse it instead of relying on get_var"""
 
@@ -81,43 +81,52 @@ class UCLI():
         # remove the newline character and leading "'b"
         cc = cc[:-1][2:]
         return int(cc, 2)
-    
+
     def list_vars(self):
         """List all variables found in the Verilog code currently being simulated"""
         self.read("show", blocking=True, run=True)
-    
+
     def get_var(self, var):
         """Get the value of a variable in the Verilog code currently being simulated"""
         return self.read(f"get {var}", blocking=True, run=True)[0]
-    
+
     def clock_cycle(self, cycles, blocking=False):
         """Run the simulation for a number of clock cycles"""
 
         if cycles <= 0:
             # not implemented yet...
-            return
+            return self.get_clock()
 
         # TODO: need a way to incrementally read values and clock cycles between runs
-        
+
         # TODO: can't possibly be the best way to do this...
         # get the current clock cycle
         cc = self.get_clock()
         # run the simulation for the specified number of cycles
         for _ in range(cycles):
             self.run("run -event clock_count")
-        
+
         if blocking:
-            # block until all commands are finished, which should be whatever was before 
+            # block until all commands are finished, which should be whatever was before
             # this function call plus the number of cycles since we just added them all
             # and (assuming no other threads) no one else can add any until we're done
             while self.commands or self.running_command:
                 time.sleep(BUSY_WAIT_TIME)
-            
+
         # get the new clock cycle
         cc_new = self.get_clock()
         return cc_new - cc
 
-    
+    # TODO: add a way to run the simulation for a certain amount of time
+
+    # TODO: add checkpoints (or something else?) to go backwards in time
+
+    # TODO: run gdb commands with cbug::gdb gdb-cmd
+
+    # TODO: add breakpoints
+
+    # TODO: add support for changing variables
+
     # -------------------- private methods --------------------
 
     def _run(self):
@@ -164,7 +173,7 @@ class UCLI():
                     ran_cmd = self._run()
                     if not ran_cmd:
                         self.waitingForPrompt = True
-        
+
         # gracefully close the process and cleanup
         self.close()
 
