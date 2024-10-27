@@ -32,14 +32,10 @@ variables=["clock", "reset", "clock_count", "mem_wb", "reg"]
 
 class ClockDisplay(Widget):
     clock = reactive(0)
+    simtime = reactive(0)
 
     def render(self) -> str:
-        return f"Clock Cycle: {self.clock}"
-
-    async def watch_clock(self, clock_value: int):
-        # self.clock = clock_value
-        await self.mount(Static())
-        self.query_one(Static).update(f"Clock Cycle: {clock_value}")
+        return f"Clock Cycle: {self.clock}, Time: {self.simtime}"
 
 class VariableDisplay(Widget):
     """A static widget that displays the value of a variable."""
@@ -62,7 +58,7 @@ class VariableDisplay(Widget):
     def compose(self) -> ComposeResult:
         with Container(classes="variable_content"):
             yield Static(self.var_name, classes="variable_name")
-            yield Static(f"{self.var_val}", classes="variable_value")
+            yield Label(f"{self.var_val}", classes="variable_value")
         with Container(classes="variable_remove"):
             yield Checkbox("", id=f"{self.var_name}-button")
 
@@ -81,21 +77,32 @@ class AddVarValidator(Validator):
 class VariableDisplayList(Widget):
     """A static widget that displays the value of all watched variables."""
 
-    variables = reactive(list, recompose=True)
+    watched_variables = reactive(list, recompose=True)
+    unused_variables = reactive(list, recompose=True)
 
     def __init__(self, *children, name = None, id = None, classes = None, disabled = False):
         super().__init__(*children, name=name, id=id, classes=classes, disabled=disabled)
 
         if "watching" in settings:
-            self.variables = list(settings["watching"].keys())
+            self.watched_variables = list(settings["watching"].keys())
+            # remove any variables that are not in the global list of variables
+            self.watched_variables = [
+                var for var in self.watched_variables if var in variables
+            ]
+        else:
+            self.watched_variables = []
+
+        self.unused_variables = [
+            var for var in variables if var not in self.watched_variables
+        ]
 
     def compose(self) -> ComposeResult:
         """Create the text to display in the widget."""
 
-        if len(self.variables) > 0:
+        if len(self.watched_variables) > 0:
             yield Static("Variables being watched:")
             with Container(id="variable_list"):
-                for var in self.variables:
+                for var in self.watched_variables:
                     yield VariableDisplay(var, id=f"vd_{var}")
         else:
             yield Static("No variables being watched")
@@ -104,11 +111,9 @@ class VariableDisplayList(Widget):
         yield Input(
             placeholder="variable name to add",
             id="add_var",
-            suggester=SuggestFromList(variables, case_sensitive=False),
-            validators=[
-                AddVarValidator()
-            ],
-            valid_empty=True
+            suggester=SuggestFromList(self.unused_variables, case_sensitive=False),
+            validators=[AddVarValidator()],
+            valid_empty=True,
         )
 
     def on_variable_display_selected(self, message):
@@ -122,9 +127,12 @@ class VariableDisplayList(Widget):
         else:
             watching = False
 
-        if watching and var in watching and var in self.variables:
+        if watching and var in watching and var in self.watched_variables:
             del watching[var]
-            self.variables.remove(var)
+            self.watched_variables.remove(var)
+            self.unused_variables.append(var)
+            self.mutate_reactive(VariableDisplayList.watched_variables)
+            self.mutate_reactive(VariableDisplayList.unused_variables)
             save_settings()
 
         self.query_one(f"#vd_{var}").remove()
@@ -140,7 +148,7 @@ class VariableDisplayList(Widget):
             return
 
         # make sure not already watching
-        if event.value in self.variables:
+        if event.value in self.watched_variables and event.value in self.unused_variables:
             self.query_one("#add_var").clear()
             return
 
@@ -159,12 +167,15 @@ class VariableDisplayList(Widget):
         # TODO: clear the input and remove focus
         self.query_one("#add_var").clear()
 
-        self.variables.append(event.value)
-        self.mutate_reactive(VariableDisplayList.variables)
+        self.unused_variables.remove(event.value)
+        self.watched_variables.append(event.value)
+        self.mutate_reactive(VariableDisplayList.watched_variables)
+        self.mutate_reactive(VariableDisplayList.unused_variables)
 
 
 class SIMVApp(App):
     """Textual application for simv debugging"""
+    global variables
 
     CSS_PATH = "debugger.tcss"
     BINDINGS = [
@@ -173,24 +184,16 @@ class SIMVApp(App):
     ]
 
     def __init__(self, ucli=None):
+        global variables
         super().__init__()
 
         self.ucli = ucli
 
         self.dark = settings.get("dark", False)
 
-    def on_mount(self):
-        def run_on_clock_change(clock_value: int):
-            self.refresh_bindings()
-        self.watch(self.query_one(ClockDisplay), "clock", run_on_clock_change)
-
-    def check_action(self, action: str, parameters):
-        """Check if an action can run (eg if simulation is finished, disable next)"""
-        # can update which bindings are runnable via self.refresh_bindings() and def check_action()
-        # or can bindings=True on reactive for checking automatically
-        # https://textual.textualize.io/guide/actions/#dynamic-actions
-        # could be useful for disabling next, run, etc when finished running
-        return True
+        # get variables from ucli
+        if self.ucli:
+            variables = self.ucli.list_vars()
 
     def compose(self) -> ComposeResult:
         """Create child widgets for the app."""
@@ -213,6 +216,37 @@ class SIMVApp(App):
 
         yield Footer()
 
+    def update_variables(self):
+        """Update the values of the list of variables being watched."""
+        # get variables from ucli
+        if self.ucli:
+            # get all variable values
+            variable_vals = self.ucli.read("show -value", blocking=True, run=True)
+            # turn into a dictionary
+            var_vals_dict = {}
+            for var in variable_vals:
+                var = var.split(" ")
+                var_vals_dict[var[0]] = " ".join(var[1:])
+            # update the values of the variables being watched
+            for var in self.query(VariableDisplay):
+                var_val = var_vals_dict[var.var_name]
+                if var_val.startswith("'b"):
+                    var_val = var_val[2:]
+                    var_val = int(var_val, 2)
+                    self.query_one(f"#vd_{var.var_name} .variable_value").update(hex(var_val))
+                else:
+                    # don't know how to handle other types yet
+                    self.query_one("#log").write(
+                        Syntax(f"{var.var_name} = {var_val}", "verilog")
+                    )
+            # update the clock cycle
+            clock = self.ucli.get_clock()
+            self.query_one(ClockDisplay).clock = hex(clock)
+            # update the simulation time
+            simtime = self.ucli.get_time()
+            self.query_one(ClockDisplay).simtime = simtime
+
+
     def action_toggle_dark(self) -> None:
         """An action to toggle dark mode."""
         # store in settings
@@ -222,37 +256,57 @@ class SIMVApp(App):
         """An action to quit the app."""
         # quit and cleanup settings and ucli
         if self.ucli:
+            self.query_one("#log").write("Exiting simulation...\n")
             self.ucli.close()
+            self.query_one("#log").write("Simulation exited.\n")
         self.exit()
 
-    # TODO: can seperate into different functions with @on(Button.Pressed, CSS Selector)
-    async def on_button_pressed(self, event: Button.Pressed) -> None:
+    def action_next_clock(self) -> None:
+        """An action to go to the next clock cycle."""
+        if self.ucli:
+            clock = self.ucli.clock_cycle(1)
+        else:
+            # used for testing without UCLI
+            self.query_one(ClockDisplay).clock += 1
+        self.update_variables()
+
+    def action_previous_clock(self) -> None:
+        """An action to go to the previous clock cycle."""
+        if self.ucli:
+            clock = self.ucli.clock_cycle(-1)
+        else:
+            # used for testing without UCLI
+            self.query_one(ClockDisplay).clock -= 1
+        self.update_variables()
+
+    def action_next_line(self) -> None:
+        """An action to go to the next line."""
+        if self.ucli:
+            code = self.ucli.read("step", blocking=True, run=True)
+            self.query_one("#log").write(Syntax(code[0], "verilog"))
+        else:
+            self.query_one("#log").write(Syntax("end\n", "verilog"))
+        self.update_variables()
+
+    def action_previous_line(self) -> None:
+        """An action to go to the previous line."""
+        if self.ucli:
+            # TODO: needs checkpoint to go back
+            self.query_one("#log").write(Syntax("end\n", "verilog"))
+        else:
+            self.query_one("#log").write(Syntax("always @(posedge clock) begin\n", "verilog"))
+        self.update_variables()
+
+    # TODO: can seperate into different functions with @on(Button.Pressed, CSS Selector)?
+    def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "previous_clock":
-            if self.ucli:
-                clock = await self.ucli.clock_cycle(-1, blocking=True)
-                self.query_one(ClockDisplay).clock = clock
-            else:
-                # used for testing without UCLI
-                self.query_one(ClockDisplay).clock -= 1
+            self.action_previous_clock()
         elif event.button.id == "next_clock":
-            if self.ucli:
-                clock = await self.ucli.clock_cycle(-1, blocking=True)
-                self.query_one(ClockDisplay).clock = clock
-            else:
-                # used for testing without UCLI
-                self.query_one(ClockDisplay).clock += 1
+            self.action_next_clock()
         elif event.button.id == "previous_line":
-            if self.ucli:
-                # TODO: needs checkpoint to go back
-                self.query_one("#log").write(Syntax("end\n", "verilog"))
-            else:
-                self.query_one("#log").write(Syntax("always @(posedge clock) begin\n", "verilog"))
+            self.action_previous_line()
         elif event.button.id == "next_line":
-            if self.ucli:
-                code = await self.ucli.read("step", blocking=True, run=True)
-                self.query_one("#log").write(Syntax("end\n", "verilog"))
-            else:
-                self.query_one("#log").write(Syntax("end\n", "verilog"))
+            self.action_next_line()
 
 
 if __name__ == "__main__":

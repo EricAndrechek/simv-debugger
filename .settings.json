@@ -1,1 +1,8 @@
-{"watching": {"reset": "", "clock": "", "mem_wb": "", "clock_count": ""}}
+{
+    "watching": {
+        "clock": "",
+        "reg": "",
+        "mem_wb": "",
+        "reset": ""
+    }
+}

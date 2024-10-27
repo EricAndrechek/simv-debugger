@@ -33,7 +33,7 @@ class UCLI():
         """Initialize the simulation and start the UCLI loop, blocking until ready"""
 
         # run the loop in a separate thread
-        self.thread = threading.Thread(target=self._loop)
+        self.thread = threading.Thread(target=self._loop, daemon=True)
         self.thread.start()
         self.run("run -delta")
         self.run("run -event clock_count")
@@ -78,13 +78,18 @@ class UCLI():
 
         self.run("get clock_count")
         cc = self.read("get clock_count", blocking=True)[0]
-        # remove the newline character and leading "'b"
-        cc = cc[:-1][2:]
+        cc = cc.split("'b")[1]
         return int(cc, 2)
+
+    def get_time(self):
+        """Special function to get the simulation time and parse it instead of relying on get_var"""
+
+        tm = self.read("senv time", blocking=True, run=True)
+        return tm[0]
 
     def list_vars(self):
         """List all variables found in the Verilog code currently being simulated"""
-        self.read("show", blocking=True, run=True)
+        return self.read("show", blocking=True, run=True)
 
     def get_var(self, var):
         """Get the value of a variable in the Verilog code currently being simulated"""
@@ -115,7 +120,7 @@ class UCLI():
 
         # get the new clock cycle
         cc_new = self.get_clock()
-        return cc_new - cc
+        return cc_new
 
     # TODO: add a way to run the simulation for a certain amount of time
 
@@ -181,6 +186,8 @@ class UCLI():
         self.stop = True
         self.proc.kill()
         self.proc.wait()
+
+        # self.thread.join()
 
     def __del__(self):
         self.close()
