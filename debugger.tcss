@@ -71,8 +71,27 @@ Screen {
     ClockDisplay {
         height: auto;
         background: $boost;
-        padding: 1;
         margin: 1;
+
+        .clock_display {
+            layout: horizontal;
+            width: 100%;
+            height: auto;
+
+            Static {
+                width: auto;
+                padding: 1;
+            }
+
+            Label {
+                width: auto;
+                padding: 1;
+            }
+
+            Input {
+                width: auto;
+            }
+        }
     }
 
     #clock-controls {

@@ -183,6 +183,55 @@ class UCLI():
     def get_var(self, var):
         """Get the value of a variable in the Verilog code currently being simulated"""
         return self.read(f"get {var}", blocking=True, run=True)[0]
+    
+    def get_vars(self, vars):
+        """Get the values of multiple variables in the Verilog code currently being simulated"""
+        variables = {}
+        for var in vars:
+            variables[var] = self.get_var(var)
+        return variables
+
+    # Ok don't do it this way it's way too slow to read in big variables like memory
+    # def get_vars(self):
+    #     """Get the values of all variables in the Verilog code currently being simulated"""
+
+    #     var_dict = {}
+    #     top_vars = self.read("show -type", blocking=True, run=True)
+    #     values = self.read("show -value", blocking=True, run=True)
+    #     for value in values:
+    #         var_name = value.split(" ")[0]
+    #         var_value = " ".join(value.split(" ")[1:])
+    #         var_dict[var_name] = var_value
+    #     for var in top_vars:
+    #         var_name = var.split(" ")[0]
+    #         is_instance = var.split(" ")[1] == "{INSTANCE"
+    #         if is_instance:
+    #             sub_values = self._recurse_get_vars(var_name)
+    #             # combine the dictionaries
+    #             for key in sub_values:
+    #                 var_dict[key] = sub_values[key]
+    #     return var_dict
+
+    # def _recurse_get_vars(self, var):
+    #     """Recursively get the values of all variables in the Verilog code currently being simulated"""
+
+    #     values = {}
+    #     # get the children of the current variable
+    #     children = self.read(f"show -type {var}.*", blocking=True, run=True)
+    #     child_values = self.read(f"show -value {var}.*", blocking=True, run=True)
+    #     for child_value in child_values:
+    #         child_name = child_value.split(" ")[0]
+    #         child_value = " ".join(child_value.split(" ")[1:])
+    #         values[child_name] = child_value
+    #     for child in children:
+    #         child_name = child.split(" ")[0]
+    #         is_instance = child.split(" ")[1] == "{INSTANCE"
+    #         if is_instance:
+    #             sub_values = self._recurse_get_vars(child_name)
+    #             # combine the dictionaries
+    #             for key in sub_values:
+    #                 values[key] = sub_values[key]
+    #     return values
 
     def set_time(self, target_time, relative=False, blocking=False):
         """Set the simulation time to a specific (relative?) value in ps"""
@@ -350,3 +399,37 @@ class UCLI():
 
     def __del__(self):
         self.close()
+
+if __name__ == "__main__":
+    import sys
+
+    # take everything after the script name as the command
+    cmd = "./build/simv +MEMORY=programs/mem/test_1.mem +OUTPUT=output/test_1"
+
+    if len(sys.argv) > 1:
+        cmd = " ".join(sys.argv[1:])
+
+    # example command for running test_1 in project 3 / lab 4
+    print("Booting up simv simulation...")
+
+    # add "-ucli -suppress=ASLR_DETECTED_INFO -ucli2Proc" to the command
+    cmd += " -ucli -suppress=ASLR_DETECTED_INFO -ucli2Proc"
+
+    ucli = UCLI(cmd)
+
+    print("Simulation booted.")
+    print("Starting simulation...")
+
+    ucli.start()
+
+    print("Simulation started.")
+
+    print("Clock speed:", ucli.clock_speed)
+    print("Clock cycles:", ucli.get_clock())
+    print("Simulation time:", ucli.get_time())
+
+    print("Listing variables...")
+    print(ucli.list_vars())
+
+    print("Getting variables...")
+    print(ucli.get_vars())

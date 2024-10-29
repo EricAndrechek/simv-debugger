@@ -7,6 +7,7 @@ from textual.suggester import SuggestFromList
 from textual.validation import Function, Number, ValidationResult, Validator
 from textual.message import Message
 from textual.widget import Widget
+from textual.binding import Binding
 
 from rich.syntax import Syntax
 
@@ -31,11 +32,23 @@ variables=["clock", "reset", "clock_count", "mem_wb", "reg"]
 # TODO: should remove variable from variables list if it is in watching and add back if removed
 
 class ClockDisplay(Widget):
-    clock = reactive(0)
-    simtime = reactive(0)
+    clock = reactive("0x0 Cycles")
+    simtime = reactive("0", recompose=True)
 
-    def render(self) -> str:
-        return f"Clock Cycle: {self.clock}, Time: {self.simtime}"
+    class Submit(Message):
+        def __init__(self, value):
+            self.value = value
+            super().__init__()
+
+    def compose(self) -> ComposeResult:
+        with Container(classes="clock_display"):
+            yield Static("Clock:")
+            yield Label(f"{self.clock} Cycles", classes="clock")
+            yield Static("Simulation Time:")
+            yield Input(f"{self.simtime}", placeholder="absolute target time (ps)", classes="simtime", type="integer")
+    
+    def on_input_submitted(self, event):
+        self.post_message(self.Submit(event.value))
 
 class VariableDisplay(Widget):
     """A static widget that displays the value of a variable."""
@@ -58,9 +71,10 @@ class VariableDisplay(Widget):
     def compose(self) -> ComposeResult:
         with Container(classes="variable_content"):
             yield Static(self.var_name, classes="variable_name")
+            # TODO: change to text box to allow changing?
             yield Label(f"{self.var_val}", classes="variable_value")
         with Container(classes="variable_remove"):
-            yield Checkbox("", id=f"{self.var_name}-button")
+            yield Checkbox("", id=f"{self.var_name.replace('.', '_dot_')}-button")
 
     def on_checkbox_changed(self, event):
         self.post_message(self.Selected(self.var_name))
@@ -103,7 +117,7 @@ class VariableDisplayList(Widget):
             yield Static("Variables being watched:")
             with Container(id="variable_list"):
                 for var in self.watched_variables:
-                    yield VariableDisplay(var, id=f"vd_{var}")
+                    yield VariableDisplay(var, id=f"vd_{var.replace('.', '_dot_')}")
         else:
             yield Static("No variables being watched")
 
@@ -120,7 +134,7 @@ class VariableDisplayList(Widget):
 
         # TODO: check if in watch list and remove it if so
 
-        var = message.id.split("-button")[0]
+        var = message.id.split("-button")[0].replace("_dot_", ".")
 
         if "watching" in settings:
             watching = settings["watching"]
@@ -135,6 +149,8 @@ class VariableDisplayList(Widget):
             self.mutate_reactive(VariableDisplayList.unused_variables)
             save_settings()
 
+        if "." in var:
+            var = var.replace(".", "_dot_")
         self.query_one(f"#vd_{var}").remove()
 
     async def on_input_submitted(self, event) -> None:
@@ -177,11 +193,26 @@ class SIMVApp(App):
     """Textual application for simv debugging"""
     global variables
 
+    show_help = False
+
     CSS_PATH = "debugger.tcss"
     BINDINGS = [
         ("q", "quit", "Quit"),
         ("d", "toggle_dark", "Toggle dark mode"),
+        ("?", "help", "Show help"),
+        Binding("right", "next_clock", "Next clock cycle", show=False),
+        Binding("left", "previous_clock", "Previous clock cycle", show=False),
+        Binding("n", "next_line", "Next line", show=False),
     ]
+
+    def action_help(self):
+        """Show help."""
+        # toggle showing the help panel
+        self.show_help = not self.show_help
+        if self.show_help:
+            self.action_show_help_panel()
+        else:
+            self.action_hide_help_panel()
 
     def __init__(self, ucli=None):
         global variables
@@ -205,13 +236,7 @@ class SIMVApp(App):
             with Container():
                 yield RichLog(highlight=True, markup=True, id="log")
             with Container(id="clock-controls"):
-                yield Container() # spacer for top left
-                yield Button("Line Back", name="previous_line", id="previous_line") # top center
-                yield Container() # spacer for top right
-
-                # bottom row
                 yield Button("Clock Back", name="previous_clock", id="previous_clock")
-                yield Button("Line Next", name="next_line", id="next_line")
                 yield Button("Clock Next", name="next_clock", id="next_clock")
 
         yield Footer()
@@ -220,16 +245,12 @@ class SIMVApp(App):
         """Update the values of the list of variables being watched."""
         # get variables from ucli
         if self.ucli:
-            # get all variable values
-            variable_vals = self.ucli.read("show -value", blocking=True, run=True)
-            # turn into a dictionary
-            var_vals_dict = {}
-            for var in variable_vals:
-                var = var.split(" ")
-                var_vals_dict[var[0]] = " ".join(var[1:])
             # update the values of the variables being watched
             for var in self.query(VariableDisplay):
-                var_val = var_vals_dict[var.var_name]
+                var_name = var.var_name.replace(".", "_dot_")
+
+                var_val = self.ucli.get_var(var.var_name)
+
                 if var_val.startswith("'b"):
                     var_val = var_val[2:]
                     # catch unintialized values
@@ -237,32 +258,36 @@ class SIMVApp(App):
                         var_val = str(var_val)
                     else:
                         var_val = hex(int(var_val, 2))
-                    self.query_one(f"#vd_{var.var_name} .variable_value").update(var_val)
+                    self.query_one(f"#vd_{var_name} .variable_value").update(var_val)
                 else:
                     # not a binary value. if not a struct or array, just display the value
-                    if var_val.startswith("{((") and var_val.endswith("))}"):
-                        var_val = var_val[3:-3]
+                    if var_val.startswith("((") and var_val.endswith("))"):
+                        var_val = var_val[2:-2]
                         var_val = var_val.split(",")
                         tmp_val_dict = {}
                         for sub_var in var_val:
                             sub_var = sub_var.split(" => ")
                             tmp_val_dict[sub_var[0]] = sub_var[1]
-                        
+
                         # if dict is not empty, render table
                         if tmp_val_dict:
                             var_val = ""
                             for key, val in tmp_val_dict.items():
                                 if val.startswith("'b"):
                                     val = val[2:]
-                                    val = hex(int(val, 2))
+                                    # catch unintialized values
+                                    if 'x' in val or "X" in val or "z" in val or "Z" in val:
+                                        val = str(val)
+                                    else:
+                                        val = hex(int(val, 2))
                                 var_val += f"{key}: {val}\n"
                         else:
                             var_val = "Empty struct"
-                        
-                        self.query_one(f"#vd_{var.var_name} .variable_value").update(var_val)
+
+                        self.query_one(f"#vd_{var_name} .variable_value").update(var_val)
                     else:
                         var_val = str(var_val)
-                        self.query_one(f"#vd_{var.var_name} .variable_value").update(var_val)
+                        self.query_one(f"#vd_{var_name} .variable_value").update(var_val)
 
             # update the clock cycle
             clock = self.ucli.get_clock()
@@ -270,7 +295,6 @@ class SIMVApp(App):
             # update the simulation time
             simtime = self.ucli.get_time()
             self.query_one(ClockDisplay).simtime = simtime
-
 
     def action_toggle_dark(self) -> None:
         """An action to toggle dark mode."""
@@ -334,6 +358,22 @@ class SIMVApp(App):
             self.action_previous_line()
         elif event.button.id == "next_line":
             self.action_next_line()
+
+    def on_clock_display_submit(self, event: ClockDisplay.Submit) -> None:
+        if self.ucli:
+            try:
+                target_time = int(event.value)
+                success = self.ucli.set_time(target_time)
+                if success:
+                    self.query_one("#log").write(f"Simulation time set to {target_time} ps.\n")
+                    self.update_variables()
+                else:
+                    self.query_one("#log").write("Error setting simulation time.\n")
+            except ValueError:
+                self.query_one("#log").write("Invalid time format. Please enter a positive integer.\n")
+                return
+        else:
+            self.query_one(ClockDisplay).simtime = event.value
 
 
 if __name__ == "__main__":
