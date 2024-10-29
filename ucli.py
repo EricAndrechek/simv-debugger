@@ -23,6 +23,9 @@ class UCLI():
         self.running_command = None
         self.output = {}
 
+        # any run, step, next, or checkpoint commands will be stored here in order
+        self.checkpoint_history = []
+
         self.EOF = False
         self.waitingForPrompt = False
 
@@ -35,6 +38,8 @@ class UCLI():
         # run the loop in a separate thread
         self.thread = threading.Thread(target=self._loop, daemon=True)
         self.thread.start()
+        self.run("config -autocheckpoint on")
+        # shouldn't have to set precheckpoint, seems to default to run, step, next
         self.run("run -delta")
         self.run("run -event clock_count")
 
@@ -98,8 +103,32 @@ class UCLI():
     def clock_cycle(self, cycles, blocking=False):
         """Run the simulation for a number of clock cycles"""
 
-        if cycles <= 0:
-            # not implemented yet...
+        if cycles == 0:
+            return self.get_clock()
+
+        if cycles < 0:
+            # get distance in checkpoint_history to `cycles` ago clock_count event
+            # ie if cycles = -1, find 1 clock_count event ago
+            # if cycles = -2, find 2 clock_count events ago
+
+            # find the indexes of the clock_count events in the checkpoint_history
+            clock_count_indexes = [i for i, x in enumerate(self.checkpoint_history) if "clock_count" in x]
+
+            # verify that there are enough clock_count events to go back to
+            if len(clock_count_indexes) < abs(cycles):
+                # TODO: too far back, need to run the simulation from the beginning and then move
+                # forward to the desired clock cycle
+                return self.get_clock()
+
+            # get the cycleth clock_count event from the end of the list
+            cycle_index = clock_count_indexes[cycles]
+
+            # go to that checkpoint
+            self.run(f"checkpoint -join {cycle_index}")
+
+            # wipe out the history after that checkpoint
+            self.checkpoint_history = self.checkpoint_history[:cycle_index + 1]
+
             return self.get_clock()
 
         # TODO: need a way to incrementally read values and clock cycles between runs
@@ -138,6 +167,10 @@ class UCLI():
         if self.commands:
             cmd = self.commands.pop(0)
             self.running_command = cmd
+
+            if cmd.startswith("checkpoint") or cmd.startswith("run") or cmd.startswith("step") or cmd.startswith("next"):
+                self.checkpoint_history.append(cmd)
+
             self.proc.stdin.write((cmd + "\n").encode())
             self.proc.stdin.flush()
             self.waitingForPrompt = False

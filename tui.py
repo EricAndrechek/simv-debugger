@@ -251,6 +251,8 @@ class SIMVApp(App):
         """An action to toggle dark mode."""
         # store in settings
         self.dark = not self.dark
+        settings["dark"] = self.dark
+        save_settings()
 
     def action_quit(self) -> None:
         """An action to quit the app."""
