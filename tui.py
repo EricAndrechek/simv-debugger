@@ -232,13 +232,38 @@ class SIMVApp(App):
                 var_val = var_vals_dict[var.var_name]
                 if var_val.startswith("'b"):
                     var_val = var_val[2:]
-                    var_val = int(var_val, 2)
-                    self.query_one(f"#vd_{var.var_name} .variable_value").update(hex(var_val))
+                    # catch unintialized values
+                    if 'x' in var_val or "X" in var_val or "z" in var_val or "Z" in var_val:
+                        var_val = str(var_val)
+                    else:
+                        var_val = hex(int(var_val, 2))
+                    self.query_one(f"#vd_{var.var_name} .variable_value").update(var_val)
                 else:
-                    # don't know how to handle other types yet
-                    self.query_one("#log").write(
-                        Syntax(f"{var.var_name} = {var_val}", "verilog")
-                    )
+                    # not a binary value. if not a struct or array, just display the value
+                    if var_val.startswith("{((") and var_val.endswith("))}"):
+                        var_val = var_val[3:-3]
+                        var_val = var_val.split(",")
+                        tmp_val_dict = {}
+                        for sub_var in var_val:
+                            sub_var = sub_var.split(" => ")
+                            tmp_val_dict[sub_var[0]] = sub_var[1]
+                        
+                        # if dict is not empty, render table
+                        if tmp_val_dict:
+                            var_val = ""
+                            for key, val in tmp_val_dict.items():
+                                if val.startswith("'b"):
+                                    val = val[2:]
+                                    val = hex(int(val, 2))
+                                var_val += f"{key}: {val}\n"
+                        else:
+                            var_val = "Empty struct"
+                        
+                        self.query_one(f"#vd_{var.var_name} .variable_value").update(var_val)
+                    else:
+                        var_val = str(var_val)
+                        self.query_one(f"#vd_{var.var_name} .variable_value").update(var_val)
+
             # update the clock cycle
             clock = self.ucli.get_clock()
             self.query_one(ClockDisplay).clock = hex(clock)

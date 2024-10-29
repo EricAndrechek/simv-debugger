@@ -48,6 +48,7 @@ Screen {
             width: auto;
             margin-right: 1;
             padding: 1;
+            padding-bottom: 0;
         }
     }
 
