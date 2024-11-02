@@ -1,1 +1,6 @@
 .settings.json
+output
+venv
+dist
+build
+__pycache__
