@@ -4,7 +4,7 @@ import sys
 import os
 import requests
 
-VERSION = "v1.0.6"
+VERSION = "v1.0.7"
 
 def main(cmd):
     """Main function to run the UCLI and TUI together."""
