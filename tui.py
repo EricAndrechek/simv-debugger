@@ -257,7 +257,10 @@ class SIMVApp(App):
                     if 'x' in var_val or "X" in var_val or "z" in var_val or "Z" in var_val:
                         var_val = str(var_val)
                     else:
-                        var_val = hex(int(var_val, 2))
+                        try:
+                            var_val = hex(int(var_val, 2))
+                        except ValueError:
+                            var_val = str(var_val)
                     self.query_one(f"#vd_{var_name} .variable_value").update(var_val)
                 else:
                     # not a binary value. if not a struct or array, just display the value
@@ -279,7 +282,10 @@ class SIMVApp(App):
                                     if 'x' in val or "X" in val or "z" in val or "Z" in val:
                                         val = str(val)
                                     else:
-                                        val = hex(int(val, 2))
+                                        try:
+                                            val = hex(int(val, 2))
+                                        except ValueError:
+                                            val = str(val)
                                 var_val += f"{key}: {val}\n"
                         else:
                             var_val = "Empty struct"

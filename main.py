@@ -2,9 +2,36 @@ from ucli import UCLI
 from tui import SIMVApp
 import sys
 import os
+import requests
+
+VERSION = "v0.1.0"
 
 def main(cmd):
     """Main function to run the UCLI and TUI together."""
+
+    # first check if update is available via github releases
+    # if so, prompt user to update
+    # if user declines, continue as normal
+    # if user accepts, download the new release and restart the program
+
+    # check for updates
+    r = requests.get("https://api.github.com/repos/EricAndrechek/simv-debugger/releases/latest")
+    latest = r.json()
+    latest_version = latest["tag_name"]
+    latest_url = latest["assets"][0]["browser_download_url"]
+
+    if latest_version != VERSION:
+        print("Update available! Downloading latest version...")
+
+        # download the latest version
+        r = requests.get(latest_url)
+        with open("debugger", "wb") as f:
+            f.write(r.content)
+
+        print("Download complete. Restarting...")
+        os.system("chmod +x debugger")
+        os.system("./debugger")
+        sys.exit(0)
 
     print("Booting up simv simulation...")
 
