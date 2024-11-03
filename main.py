@@ -27,12 +27,28 @@ def main(cmd):
         r = requests.get(latest_url)
         with open("debugger_new", "wb") as f:
             f.write(r.content)
-        
-        # move the new version to the correct location
-        # can't overwrite the current script, so we need to move it to a temp location
-        os.system("mv debugger_new debugger")
-        os.system("chmod +x debugger")
-        os.system("./debugger " + cmd)
+
+        # make a new file to
+        # wait for the python process to close
+        # delete this version of the program (debugger executable)
+        # move the new version to the current version
+        # restart the program
+        # deleting itself
+
+        lines = []
+        lines.append("#!/bin/bash") # shebang
+        lines.append(f"sleep 1") # wait for the python process to close
+        lines.append(f"rm {sys.argv[0]}") # delete this version of the program
+        lines.append(f"mv debugger_new {sys.argv[0]}") # move the new version to the current version
+        lines.append(f"./{sys.argv[0]} {cmd}") # restart the program
+        lines.append(f"rm .updater.sh")
+
+        with open(".updater.sh", "w") as f:
+            f.write("\n".join(lines))
+
+        os.system("chmod +x .updater.sh")
+        os.system("./.updater.sh")
+
         sys.exit(0)
 
     print("Booting up simv simulation...")
