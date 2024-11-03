@@ -4,7 +4,7 @@ import sys
 import os
 import requests
 
-VERSION = "v1.0.7"
+VERSION = "v1.0.8"
 
 def main(cmd):
     """Main function to run the UCLI and TUI together."""
@@ -26,7 +26,7 @@ def main(cmd):
 
         choice = input()
 
-        if choice.lower() != "y":
+        if choice.lower() == "y":
             print("Downloading latest version...")
 
             # download the latest version
