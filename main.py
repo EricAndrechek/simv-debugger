@@ -47,7 +47,7 @@ def main(cmd):
             f.write("\n".join(lines))
 
         os.system("chmod +x .updater.sh")
-        os.system("./.updater.sh")
+        os.system("./.updater.sh &")
 
         sys.exit(0)
 
