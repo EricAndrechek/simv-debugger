@@ -4,7 +4,7 @@ import sys
 import os
 import requests
 
-VERSION = "v0.1.0"
+VERSION = "v1.0.6"
 
 def main(cmd):
     """Main function to run the UCLI and TUI together."""
@@ -21,35 +21,41 @@ def main(cmd):
     latest_url = latest["assets"][0]["browser_download_url"]
 
     if latest_version != VERSION:
-        print("Update available! Downloading latest version...")
+        print(f"A new version of the debugger is available! ({latest_version}) (Current: {VERSION})")
+        print("Would you like to update? (y/n)")
 
-        # download the latest version
-        r = requests.get(latest_url)
-        with open("debugger_new", "wb") as f:
-            f.write(r.content)
+        choice = input()
 
-        # make a new file to
-        # wait for the python process to close
-        # delete this version of the program (debugger executable)
-        # move the new version to the current version
-        # restart the program
-        # deleting itself
+        if choice.lower() != "y":
+            print("Downloading latest version...")
 
-        lines = []
-        lines.append("#!/bin/bash") # shebang
-        lines.append(f"sleep 1") # wait for the python process to close
-        lines.append(f"rm {sys.argv[0]}") # delete this version of the program
-        lines.append(f"mv debugger_new {sys.argv[0]}") # move the new version to the current version
-        lines.append(f"./{sys.argv[0]} {cmd}") # restart the program
-        lines.append(f"rm .updater.sh")
+            # download the latest version
+            r = requests.get(latest_url)
+            with open("debugger_new", "wb") as f:
+                f.write(r.content)
 
-        with open(".updater.sh", "w") as f:
-            f.write("\n".join(lines))
+            # make a new file to
+            # wait for the python process to close
+            # delete this version of the program (debugger executable)
+            # move the new version to the current version
+            # restart the program
+            # deleting itself
 
-        os.system("chmod +x .updater.sh")
-        os.system("./.updater.sh &")
+            lines = []
+            lines.append("#!/bin/bash") # shebang
+            lines.append(f"sleep 1") # wait for the python process to close
+            lines.append(f"rm {sys.argv[0]}") # delete this version of the program
+            lines.append(f"mv debugger_new {sys.argv[0]}") # move the new version to the current version
+            lines.append(f"echo 'New version installed. Run the debugger again to start.'") # restart the program
+            lines.append(f"rm .updater.sh")
 
-        sys.exit(0)
+            with open(".updater.sh", "w") as f:
+                f.write("\n".join(lines))
+
+            os.system("chmod +x .updater.sh")
+            os.system("./.updater.sh &")
+
+            sys.exit(0)
 
     print("Booting up simv simulation...")
 
