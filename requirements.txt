@@ -1,4 +1,7 @@
 altgraph==0.17.4
+certifi==2024.8.30
+charset-normalizer==3.4.0
+idna==3.10
 linkify-it-py==2.0.3
 macholib==1.16.3
 markdown-it-py==3.0.0
@@ -9,8 +12,10 @@ platformdirs==4.3.6
 Pygments==2.18.0
 pyinstaller==6.11.0
 pyinstaller-hooks-contrib==2024.9
+requests==2.32.3
 rich==13.9.4
 setuptools==75.3.0
 textual==0.85.1
 typing_extensions==4.12.2
 uc-micro-py==1.0.3
+urllib3==2.2.3
