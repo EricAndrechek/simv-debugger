@@ -25,12 +25,14 @@ def main(cmd):
 
         # download the latest version
         r = requests.get(latest_url)
-        with open("debugger", "wb") as f:
+        with open("debugger_new", "wb") as f:
             f.write(r.content)
-
-        print("Download complete. Restarting...")
+        
+        # move the new version to the correct location
+        # can't overwrite the current script, so we need to move it to a temp location
+        os.system("mv debugger_new debugger")
         os.system("chmod +x debugger")
-        os.system("./debugger")
+        os.system("./debugger " + cmd)
         sys.exit(0)
 
     print("Booting up simv simulation...")
