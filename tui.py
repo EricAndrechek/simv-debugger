@@ -245,6 +245,13 @@ class SIMVApp(App):
         """Update the values of the list of variables being watched."""
         # get variables from ucli
         if self.ucli:
+            # check if ucli is still running
+            if self.ucli.proc.poll() is not None:
+                self.query_one("#log").write("Simulation has ended.\n")
+                self.ucli.close()
+                self.ucli = None
+                return
+
             # update the values of the variables being watched
             for var in self.query(VariableDisplay):
                 var_name = var.var_name.replace(".", "_dot_")
