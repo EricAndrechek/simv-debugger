@@ -94,7 +94,8 @@ class UCLI():
 
         # TODO: would it be better to read the makefile and find the clock speed there?
         # now find the speed of the clock
-        time_returned = self.read(f"run -change {self.clock_name}", blocking=True, run=True)[0]
+        self.read(f"run -change {self.clock_name}", blocking=True, run=True)[0]
+        time_returned = self.read("senv time", blocking=True, run=True)[0]
         # now parse out the " ps" and convert to an integer
         self.clock_speed = convert_time(time_returned) * 2 # the clock is half the speed of the time returned
 
@@ -357,7 +358,8 @@ class UCLI():
         command_output = []
         line = ""
 
-        while True:
+        # while proc is running
+        while not self.EOF:
             c = self.proc.stdout.read(1)
             if c == b"":
                 self.EOF = True
@@ -430,6 +432,3 @@ if __name__ == "__main__":
 
     print("Listing variables...")
     print(ucli.list_vars())
-
-    print("Getting variables...")
-    print(ucli.get_vars())
