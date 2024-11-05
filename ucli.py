@@ -112,6 +112,10 @@ class UCLI():
     def run(self, cmd):
         """Run a custom command in the UCLI"""
 
+        if self.proc.poll() is not None:
+            print("Simulation has ended")
+            return
+
         self.commands.append(cmd)
 
         # if there is no command currently running, just run it now
@@ -129,13 +133,16 @@ class UCLI():
             self.run(command)
 
         if blocking:
-            while command not in self.output:
+            while command not in self.output and self.proc.poll() is None:
                 time.sleep(BUSY_WAIT_TIME)
 
         # this will remove the command from the output dictionary
         # do we want this behavior to allow blocking, or
         # should we allow "caching" of the output for repeated access?
-        return self.output.pop(command)
+        try:
+            return self.output.pop(command)
+        except KeyError:
+            return []
 
     def get_clock(self):
         """Special function to get the clock cycle and parse it instead of relying on get_var"""
@@ -388,6 +395,12 @@ class UCLI():
                     ran_cmd = self._run()
                     if not ran_cmd:
                         self.waitingForPrompt = True
+        
+        # TODO: cleanup waiting commands
+        if self.commands:
+            print("Commands left in queue:")
+            for cmd in self.commands:
+                print(cmd)
 
         # gracefully close the process and cleanup
         self.close()
