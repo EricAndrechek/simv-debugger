@@ -246,10 +246,8 @@ class SIMVApp(App):
         # get variables from ucli
         if self.ucli:
             # check if ucli is still running
-            if self.ucli.proc.poll() is not None:
-                self.query_one("#log").write("Simulation has ended.\n")
-                self.ucli.close()
-                self.ucli = None
+            if self.ucli.stop is True:
+                self.query_one("#log").write("Simulation has stopped.\n")
                 return
 
             # update the values of the variables being watched
