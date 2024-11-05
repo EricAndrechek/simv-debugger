@@ -4,7 +4,7 @@ import sys
 import os
 import requests
 
-VERSION = "v1.0.9"
+VERSION = "v1.0.10"
 
 def main(cmd):
     """Main function to run the UCLI and TUI together."""
@@ -72,9 +72,11 @@ def main(cmd):
     
     # ensure cmd is a string and first element is the executable that exists
     if not isinstance(cmd, str):
-        raise ValueError("cmd must be a string")
+        print("Command must be a string")
+        sys.exit(1)
     if not os.path.exists(cmd.split()[0]):
-        raise FileNotFoundError(f"Executable {cmd.split()[0]} not found")
+        print(f"Executable {cmd.split()[0]} does not exist")
+        sys.exit(1)
 
     print("Booting up simv simulation...")
 
@@ -121,5 +123,6 @@ if __name__ == "__main__":
         # print out command options
         print("Usage: ./debugger [command]")
         print("Example: ./debugger ./build/simv +MEMORY=programs/mem/test_1.mem +OUTPUT=output/test_1")
+        sys.exit(1)
 
     main(cmd)
