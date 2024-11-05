@@ -4,7 +4,7 @@ import sys
 import os
 import requests
 
-VERSION = "v1.0.11"
+VERSION = "v1.0.12"
 
 def main(cmd):
     """Main function to run the UCLI and TUI together."""
@@ -77,6 +77,9 @@ def main(cmd):
     if not isinstance(cmd, str):
         print("Command must be a string")
         sys.exit(1)
+    if len(cmd.split()) == 0:
+        print("Command must not be empty")
+        sys.exit(1)
     if not os.path.exists(cmd.split()[0]):
         print(f"Executable {cmd.split()[0]} does not exist")
         sys.exit(1)
@@ -122,7 +125,8 @@ if __name__ == "__main__":
 
     if len(sys.argv) > 1:
         cmd = " ".join(sys.argv[1:])
-    elif len(sys.argv) == 1 or sys.argv[1] == "--help" or sys.argv[1] == "-h":
+    
+    if len(sys.argv) == 1 or sys.argv[1] == "--help" or sys.argv[1] == "-h":
         # print out command options
         print("Usage: ./debugger [command]")
         print("Example: ./debugger ./build/simv +MEMORY=programs/mem/test_1.mem +OUTPUT=output/test_1")

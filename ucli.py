@@ -359,7 +359,7 @@ class UCLI():
         line = ""
 
         # while proc is running
-        while not self.EOF:
+        while not self.EOF and not self.stop and self.proc.poll() is None:
             c = self.proc.stdout.read(1)
             if c == b"":
                 self.EOF = True
