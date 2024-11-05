@@ -225,6 +225,10 @@ class SIMVApp(App):
         # get variables from ucli
         if self.ucli:
             variables = self.ucli.list_vars()
+            # write the variables to the log
+            self.query_one("#log").write("Variables found in simulation:\n")
+            for var in variables:
+                self.query_one("#log").write(f"{var}\n")
 
     def compose(self) -> ComposeResult:
         """Create child widgets for the app."""
@@ -249,6 +253,18 @@ class SIMVApp(App):
             if self.ucli.stop is True:
                 self.query_one("#log").write("Simulation has stopped.\n")
                 return
+
+            # update the clock cycle
+            try:
+                clock = self.ucli.get_clock()
+            except IndexError:
+                # simulation has ended
+                self.query_one("#log").write("Simulation has ended.\n")
+                return
+            self.query_one(ClockDisplay).clock = hex(clock)
+            # update the simulation time
+            simtime = self.ucli.get_time()
+            self.query_one(ClockDisplay).simtime = simtime
 
             # update the values of the variables being watched
             for var in self.query(VariableDisplay):
@@ -299,13 +315,6 @@ class SIMVApp(App):
                     else:
                         var_val = str(var_val)
                         self.query_one(f"#vd_{var_name} .variable_value").update(var_val)
-
-            # update the clock cycle
-            clock = self.ucli.get_clock()
-            self.query_one(ClockDisplay).clock = hex(clock)
-            # update the simulation time
-            simtime = self.ucli.get_time()
-            self.query_one(ClockDisplay).simtime = simtime
 
     def action_toggle_dark(self) -> None:
         """An action to toggle dark mode."""
