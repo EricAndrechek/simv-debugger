@@ -4,7 +4,7 @@ import sys
 import os
 import requests
 
-VERSION = "v1.0.10"
+VERSION = "v1.0.11"
 
 def main(cmd):
     """Main function to run the UCLI and TUI together."""
@@ -23,6 +23,13 @@ def main(cmd):
     if "--no-update" in cmd:
         cmd = cmd.replace("--no-update", "")
     else:
+        choice = False
+
+        if "--update" in cmd or "--upgrade" in cmd or "-u" in cmd:
+            # remove the flag from the command
+            cmd = cmd.replace("--update", "").replace("--upgrade", "").replace("-u", "")
+            choice = "y"
+        
         # check for updates
         r = requests.get("https://api.github.com/repos/EricAndrechek/simv-debugger/releases/latest", timeout=5)
         latest = r.json()
@@ -31,11 +38,7 @@ def main(cmd):
 
         if latest_version != VERSION:
             # check if they ran --update or --upgrade or -u
-            if "--update" in cmd or "--upgrade" in cmd or "-u" in cmd:
-                # remove the flag from the command
-                cmd = cmd.replace("--update", "").replace("--upgrade", "").replace("-u", "")
-                choice = "y"
-            else:
+            if not choice:
                 print(f"A new version of the debugger is available! ({latest_version}) (Current: {VERSION})")
                 choice = input("Would you like to update? (y/n): ")
 
@@ -119,7 +122,7 @@ if __name__ == "__main__":
 
     if len(sys.argv) > 1:
         cmd = " ".join(sys.argv[1:])
-    else:
+    elif len(sys.argv) == 1 or sys.argv[1] == "--help" or sys.argv[1] == "-h":
         # print out command options
         print("Usage: ./debugger [command]")
         print("Example: ./debugger ./build/simv +MEMORY=programs/mem/test_1.mem +OUTPUT=output/test_1")
