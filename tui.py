@@ -225,10 +225,6 @@ class SIMVApp(App):
         # get variables from ucli
         if self.ucli:
             variables = self.ucli.list_vars()
-            # write the variables to the log
-            self.query_one("#log").write("Variables found in simulation:\n")
-            for var in variables:
-                self.query_one("#log").write(f"{var}\n")
 
     def compose(self) -> ComposeResult:
         """Create child widgets for the app."""
@@ -244,6 +240,15 @@ class SIMVApp(App):
                 yield Button("Clock Next", name="next_clock", id="next_clock")
 
         yield Footer()
+
+    def on_mount(self) -> None:
+        """Mount the app and update the variables."""
+        self.update_variables()
+
+        # write the variables to the log
+        self.query_one("#log").write("Variables found in simulation:\n")
+        for var in variables:
+            self.query_one("#log").write(f"{var}\n")
 
     def update_variables(self):
         """Update the values of the list of variables being watched."""
