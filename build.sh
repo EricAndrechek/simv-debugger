@@ -2,23 +2,32 @@
 
 set -x
 
-git pull
+# check if --pull flag is passed
+# flag check from:
+# https://stackoverflow.com/a/2876177/7974356
+if [[ $* == *--pull* ]]; then
+    git pull
+fi
 
-# python3.8 -m venv venv
 source venv/bin/activate
-pip install -r requirements.txt
 
-# read input to ask if clean build --> store clean bool in variable clean
-read -p "Do you want to clean the build folder? (y/n) " clean
+# check if --pip flag is passed
+if [[ $* == *--pip* ]]; then
+    pip install -r requirements.txt
+fi
 
-# if clean is true, add --clean to the pyinstaller command
-if [ $clean == "y" ]; then
-    pyinstaller --onefile --name debugger --add-data "debugger.tcss:." --clean main.py
+# check if --clean flag is passed
+if [[ $* == *--clean* ]]; then
+    pyinstaller --onefile --name debugger --add-data "debugger.tcss:." --clean --collect-submodules textual.widgets main.py
 else
-    pyinstaller --onefile --name debugger --add-data "debugger.tcss:." main.py
+    pyinstaller --onefile --name debugger --add-data "debugger.tcss:." --collect-submodules textual.widgets main.py
 fi
 
 cp dist/debugger .
-git add debugger
-git commit -m "Updated debugger"
-git push
+
+# check if --push flag is passed
+if [[ $* == *--push* ]]; then
+    git add debugger
+    git commit -m "Updated debugger"
+    git push
+fi

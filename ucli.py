@@ -3,6 +3,7 @@ import shlex
 import select
 import time
 import threading
+import click
 
 BUSY_WAIT_TIME = 0.001
 
@@ -24,7 +25,7 @@ def convert_time(time_str):
     elif base == "s":
         time *= 10**12
     else:
-        print(f"Unknown time base: {base}")
+        click.secho(f"Unknown time base: {base}", fg="red")
         time = 0
 
     return time
@@ -45,7 +46,9 @@ def convert_time_to_str(time_int):
     return f"{time_int}ps"
 
 class UCLI():
-    def __init__(self, cmd):
+    def __init__(self, cmd, verbose=False):
+        self.cmd = cmd
+        self.verbose = verbose
         self.proc = subprocess.Popen(shlex.split(cmd), stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE)
         self.poll_obj = select.poll()
         self.poll_obj.register(self.proc.stdout, select.POLLIN)
@@ -76,6 +79,12 @@ class UCLI():
         # run the loop in a separate thread
         self.thread = threading.Thread(target=self._loop, daemon=True)
         self.thread.start()
+
+        # check that the command ran and didn't immediately exit
+        if self.proc.poll() is not None:
+            raise FileNotFoundError(f"Executable {self.cmd.split()[0]} does not exist or exited immediately")
+        
+        # initialize the simulation
         self.run("config -autocheckpoint on")
         # precheckpoint seems to default to run, step, next
         # we are (at least for now?) only allowing run as checkpoints
@@ -91,11 +100,17 @@ class UCLI():
             if "clock" in var or "clk" in var:
                 self.clock_name = var
                 break
+        # handle the case where no clock is found
+        if not self.clock_name:
+            raise ValueError("Could not find clock variable")
 
         # TODO: would it be better to read the makefile and find the clock speed there?
         # now find the speed of the clock
-        self.read(f"run -change {self.clock_name}", blocking=True, run=True)[0]
-        time_returned = self.read("senv time", blocking=True, run=True)[0]
+        self.read(f"run -change {self.clock_name}", blocking=True, run=True)
+        try:
+            time_returned = self.read("senv time", blocking=True, run=True)[0]
+        except IndexError:
+            raise ValueError("Could not find clock speed")
         # now parse out the " ps" and convert to an integer
         self.clock_speed = convert_time(time_returned) * 2 # the clock is half the speed of the time returned
 
@@ -113,7 +128,7 @@ class UCLI():
         """Run a custom command in the UCLI"""
 
         if self.proc.poll() is not None:
-            print("Simulation has ended")
+            click.secho(f"Command '{cmd}' can not run, simulation has ended.", fg="red")
             return
 
         self.commands.append(cmd)
@@ -396,19 +411,26 @@ class UCLI():
                     if not ran_cmd:
                         self.waitingForPrompt = True
         
-        # TODO: cleanup waiting commands
-        if self.commands:
-            print("Commands left in queue:")
-            for cmd in self.commands:
-                print(cmd)
+        # TODO: handle the case where the process has ended
+        # ie, should we restart the process? or just let it die?
+
+        if self.verbose:
+            if self.commands:
+                click.secho("Commands left in queue:", fg="black")
+                for cmd in self.commands:
+                    click.secho(cmd, fg="black")
 
         # gracefully close the process and cleanup
         self.close()
 
     def close(self):
         self.stop = True
-        self.proc.kill()
-        self.proc.wait()
+        if "proc" in dir(self):
+            self.proc.stdin.close()
+            self.proc.stdout.close()
+            self.proc.stderr.close()
+            self.proc.kill()
+            self.proc.wait()
 
         # self.thread.join()
 

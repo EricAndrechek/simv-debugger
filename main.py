@@ -1,35 +1,43 @@
-from ucli import UCLI
 from tui import SIMVApp
 import sys
 import os
 import requests
+import click
 
 VERSION = "v1.0.16"
 
-def main(cmd):
+def main(cmd, verbose=False):
     """Main function to run the UCLI and TUI together."""
+    
+    if verbose:
+        click.secho("Launching UI...", fg="black")
 
-    # first check if update is available via github releases
-    # if so, prompt user to update
-    # if user declines, continue as normal
-    # if user accepts, download the new release and restart the program
+    app = SIMVApp(cmd, verbose)
+    app.run()
 
-    # check if --version is passed as an argument
-    if "--version" in cmd or "-v" in cmd:
-        print(f"Debugger version: {VERSION}")
-        sys.exit(0)
+    if verbose:
+        click.secho("UI closed.", fg="black")
+    del app
+    if verbose:
+        click.secho("UI cleaned up.", fg="black")
+    
+    if verbose:
+        click.echo("Exiting...", fg="black")
+    sys.exit(0)
 
-    # check if --no-update is passed as an argument
-    if "--no-update" in cmd:
-        cmd = cmd.replace("--no-update", "")
-    else:
-        choice = False
+def updater(update=False, check=True, verbose=False):
+    # if update is true, check for updates and update automatically
+    # otherwise, check for updates and prompt user to update
+    # if check is false, do not check for updates
 
-        if "--update" in cmd or "--upgrade" in cmd or "-u" in cmd:
-            # remove the flag from the command
-            cmd = cmd.replace("--update", "").replace("--upgrade", "").replace("-u", "")
-            choice = "y"
-        
+    # if both update and check are true, tell the user that they cannot be used together
+    if update and check:
+        click.secho("Cannot use --update and --no-update together. Make up your mind and try again.", fg="red")
+        sys.exit(1)
+
+    if check:
+        if verbose:
+            click.secho("Checking for updates...", fg="black")
         # check for updates
         r = requests.get("https://api.github.com/repos/EricAndrechek/simv-debugger/releases/latest", timeout=5)
         latest = r.json()
@@ -37,13 +45,14 @@ def main(cmd):
         latest_url = latest["assets"][0]["browser_download_url"]
 
         if latest_version != VERSION:
-            # check if they ran --update or --upgrade or -u
-            if not choice:
-                print(f"A new version of the debugger is available! ({latest_version}) (Current: {VERSION})")
-                choice = input("Would you like to update? (y/n): ")
+            if update is False:
+                click.echo(f"A new version of the debugger is available! ({latest_version}) (Current: {VERSION})")
+                choice = click.confirm("Would you like to update?")
+                if choice:
+                    update = True
 
-            if choice.lower() == "y":
-                print("Downloading latest version...")
+            if update:
+                click.echo("Downloading latest version...")
 
                 # download the latest version
                 r = requests.get(latest_url, timeout=30)
@@ -58,12 +67,13 @@ def main(cmd):
                 # deleting itself
 
                 lines = []
-                lines.append("#!/bin/bash") # shebang
-                lines.append(f"sleep 1") # wait for the python process to close
-                lines.append(f"rm {sys.argv[0]}") # delete this version of the program
-                lines.append(f"mv debugger_new {sys.argv[0]}") # move the new version to the current version
-                lines.append(f"echo 'New version installed. Run the debugger again to start.'") # restart the program
-                lines.append(f"rm .updater.sh")
+                lines.append("#!/bin/bash")
+                lines.append("sleep 1")  # wait for the python process to close
+                lines.append(f"rm {sys.argv[0]}")  # delete this version of the program
+                lines.append(
+                    f"mv debugger_new {sys.argv[0]}"
+                )  # move the new version to the current version
+                lines.append("rm .updater.sh")
 
                 with open(".updater.sh", "w") as f:
                     f.write("\n".join(lines))
@@ -72,64 +82,54 @@ def main(cmd):
                 os.system("./.updater.sh &")
 
                 sys.exit(0)
+            else:
+                if verbose:
+                    click.secho("User chose not to update. Returning to main execution...", fg="black")
+        else:
+            if verbose:
+                click.secho("No updates available.", fg="black")
+    else:
+        if verbose:
+            click.secho("Skipping update check...", fg="black")
+
+
+
+def check_version(check=False):
+    if check:
+        click.echo(f"Simv Debugger version: {VERSION}")
+        sys.exit(0)
+
+
+@click.command(epilog="Check out https://github.com/EricAndrechek/simv-debugger for more")
+@click.option("--verbose", "-v", is_flag=True, help="Enable verbose output.")
+@click.option("--version", is_flag=True, help="Print the version of the debugger.")
+@click.option("--update", "-u", is_flag=True, help="Check for updates and update if available.")
+@click.option("--no-update", is_flag=True, help="Do not check for updates.")
+@click.argument("command", nargs=-1)
+def cli(verbose, version, update, no_update, command):
+    """Debugger for the simv simulator.
     
-    # ensure cmd is a string and first element is the executable that exists
-    if not isinstance(cmd, str):
-        print("Command must be a string")
-        sys.exit(1)
-    if len(cmd.split()) == 0:
-        print("Command must not be empty")
-        sys.exit(1)
-    if not os.path.exists(cmd.split()[0]):
-        print(f"Executable {cmd.split()[0]} does not exist")
-        sys.exit(1)
+    COMMAND is the simv file to run with the debugger, followed by any arguments to pass to the simv executable. It can be omitted if you want to run the debugger without a simv executable.
 
-    print("Booting up simv simulation...")
+    Example:
+    debugger ./build/test1.simv +MEMORY=programs/mem/test_1.mem +OUTPUT=output/test
+    """
 
-    # add "-ucli -suppress=ASLR_DETECTED_INFO -ucli2Proc" to the command
-    cmd += " -ucli -suppress=ASLR_DETECTED_INFO -ucli2Proc"
+    check_version(version)
+    updater(update, not no_update, verbose)
 
-    try:
-        ucli = UCLI(cmd)
-    except FileNotFoundError as e:
-        print(e)
-        sys.exit(1)
-
-    print("Simulation booted.")
-    print("Starting simulation...")
-
-    ucli.start()
-
-    print("Simulation started.")
-    print("Launching UI...")
-
-    app = SIMVApp(ucli)
-    app.run()
-
-    print("UI closed.")
-    del app
-    print("UI cleaned up.")
-
-    print("Shutting down simulation...")
-    ucli.close()
-    del ucli
-    print("Simulation shut down.")
-
-    print("Exiting...")
-    sys.exit(0)
+    if len(command) == 0:
+        if verbose:
+            click.secho("No simv executable specified", fg="black")
+        main(None, verbose)
+    else:
+        cmd = " ".join(command)
+        # add "-ucli -suppress=ASLR_DETECTED_INFO -ucli2Proc" to the command
+        cmd += " -ucli -suppress=ASLR_DETECTED_INFO -ucli2Proc"
+        main(cmd, verbose)
+    
+    if verbose:
+        click.secho("Exiting...", fg="black")
 
 if __name__ == "__main__":
-    # take everything after the script name as the command
-    # example command for running test_1 in project 3 / lab 4
-    cmd = "./build/simv +MEMORY=programs/mem/test_1.mem +OUTPUT=output/test_1"
-
-    if len(sys.argv) > 1:
-        cmd = " ".join(sys.argv[1:])
-    
-    if len(sys.argv) == 1 or sys.argv[1] == "--help" or sys.argv[1] == "-h":
-        # print out command options
-        print("Usage: ./debugger [command]")
-        print("Example: ./debugger ./build/simv +MEMORY=programs/mem/test_1.mem +OUTPUT=output/test_1")
-        sys.exit(1)
-
-    main(cmd)
+    cli()

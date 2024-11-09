@@ -1,6 +1,6 @@
 from textual.app import App, ComposeResult
 from textual.containers import ScrollableContainer, Horizontal, Vertical, Container
-from textual.widgets import Button, Footer, Header, Static, Label, Input, Pretty, Checkbox, RichLog
+from textual.widgets import Button, Footer, Header, Static, Label, Input, Pretty, Checkbox, RichLog, Tabs, Tab, TabbedContent, TabPane
 from textual.reactive import reactive
 from textual import events
 from textual.suggester import SuggestFromList
@@ -13,20 +13,12 @@ from rich.syntax import Syntax
 
 import os
 import json
+import click
+import time
 
-# try to grab settings from .settings.json
-if os.path.exists(".settings.json"):
-    with open(".settings.json", "r") as f:
-        settings = json.load(f)
-else:
-    settings = {}
-
-def save_settings():
-    with open(".settings.json", "w") as f:
-        json.dump(settings, f, indent=4)
-
-# replace with actual variables
-variables=["clock", "reset", "clock_count", "mem_wb", "reg"]
+from settings import Globals, SettingsWidget
+from make import MakeTargets, MakeTarget, load_makefile
+from ucli import UCLI
 
 # TODO: how to get values from structs in vars?
 # TODO: should remove variable from variables list if it is in watching and add back if removed
@@ -34,6 +26,9 @@ variables=["clock", "reset", "clock_count", "mem_wb", "reg"]
 class ClockDisplay(Widget):
     clock = reactive("0x0 Cycles")
     simtime = reactive("0", recompose=True)
+
+    def __init__(self, id=None) -> None:
+        super().__init__(id=id)
 
     class Submit(Message):
         def __init__(self, value):
@@ -82,7 +77,7 @@ class VariableDisplay(Widget):
 class AddVarValidator(Validator):
     def validate(self, value: str) -> ValidationResult:
         """Check a string is in the list of variables."""
-        if value in variables:
+        if value in Globals().variables:
             return self.success()
         else:
             return self.failure("Variable not found")
@@ -97,17 +92,17 @@ class VariableDisplayList(Widget):
     def __init__(self, *children, name = None, id = None, classes = None, disabled = False):
         super().__init__(*children, name=name, id=id, classes=classes, disabled=disabled)
 
-        if "watching" in settings:
-            self.watched_variables = list(settings["watching"].keys())
+        if "watching" in Globals().settings:
+            self.watched_variables = list(Globals().settings["watching"].keys())
             # remove any variables that are not in the global list of variables
             self.watched_variables = [
-                var for var in self.watched_variables if var in variables
+                var for var in self.watched_variables if var in Globals().variables
             ]
         else:
             self.watched_variables = []
 
         self.unused_variables = [
-            var for var in variables if var not in self.watched_variables
+            var for var in Globals().variables if var not in self.watched_variables
         ]
 
     def compose(self) -> ComposeResult:
@@ -136,8 +131,8 @@ class VariableDisplayList(Widget):
 
         var = message.id.split("-button")[0].replace("_dot_", ".")
 
-        if "watching" in settings:
-            watching = settings["watching"]
+        if "watching" in Globals().settings:
+            watching = Globals().settings["watching"]
         else:
             watching = False
 
@@ -147,7 +142,7 @@ class VariableDisplayList(Widget):
             self.unused_variables.append(var)
             self.mutate_reactive(VariableDisplayList.watched_variables)
             self.mutate_reactive(VariableDisplayList.unused_variables)
-            save_settings()
+            Globals().save_settings()
 
         if "." in var:
             var = var.replace(".", "_dot_")
@@ -168,17 +163,17 @@ class VariableDisplayList(Widget):
             self.query_one("#add_var").clear()
             return
 
-        if "watching" not in settings:
-            settings["watching"] = {}
-            settings["watching"][event.value] = ""
-        elif event.value not in settings["watching"]:
-            settings["watching"][event.value] = ""
+        if "watching" not in Globals().settings:
+            Globals().settings["watching"] = {}
+            Globals().settings["watching"][event.value] = ""
+        elif event.value not in Globals().settings["watching"]:
+            Globals().settings["watching"][event.value] = ""
         else:
             # don't overwrite the value or change settings
             pass
 
         # save settings
-        save_settings()
+        Globals().save_settings()
 
         # TODO: clear the input and remove focus
         self.query_one("#add_var").clear()
@@ -191,17 +186,16 @@ class VariableDisplayList(Widget):
 
 class SIMVApp(App):
     """Textual application for simv debugging"""
-    global variables
 
     show_help = False
 
-    CSS_PATH = "debugger.tcss"
+    # CSS_PATH = "debugger.tcss"
     BINDINGS = [
         ("q", "quit", "Quit"),
         ("d", "toggle_dark", "Toggle dark mode"),
         ("?", "help", "Show help"),
-        Binding("right", "next_clock", "Next clock cycle", show=False),
-        Binding("left", "previous_clock", "Previous clock cycle", show=False),
+        Binding("down", "next_clock", "Next clock cycle", show=False),
+        Binding("up", "previous_clock", "Previous clock cycle", show=False),
         Binding("n", "next_line", "Next line", show=False),
     ]
 
@@ -214,40 +208,109 @@ class SIMVApp(App):
         else:
             self.action_hide_help_panel()
 
-    def __init__(self, ucli=None):
-        global variables
+    def run_ucli(self, cmd):
+        text_log = self.query_one("#log")
+
+        if not os.path.exists(cmd.split()[0]):
+            text_log.write(f"[red]Executable {cmd.split()[0]} does not exist\n")
+            # self.exit()
+            return
+        if self.verbose:
+            text_log.write("[dim]Booting up simv simulation...\n")
+
+        try:
+            self.ucli = UCLI(cmd)
+        except (FileNotFoundError, ValueError) as e:
+            text_log.write(f"[red]Error: {e}\n")
+
+            # if the error is a FileNotFoundError, try to help
+            if isinstance(e, FileNotFoundError):
+                # search build directory (if it exists) for .simv executable files
+                if os.path.exists("build"):
+                    files = os.listdir("build")
+                    simv_files = [f for f in files if f.endswith(".simv")]
+
+                    if len(simv_files) > 0:
+                        text_log.write("Did you mean to run one of these executables I found?\n")
+                        for f in simv_files:
+                            text_log.write(f"./build/{f}\n")
+
+            # self.exit()
+            return
+        
+        if self.verbose:
+            text_log.write("[dim]Simulation booted.\n")
+            text_log.write("[dim]Starting simulation...\n")
+
+        try:
+            self.ucli.start()
+        except (FileNotFoundError, ValueError) as e:
+            text_log.write(f"[red]Error: {e}\n")
+            # self.exit()
+            return
+
+        if self.verbose:
+            text_log.write("[dim]Simulation started.\n")
+
+    def __init__(self, cmd, verbose=False):
         super().__init__()
 
-        self.ucli = ucli
+        self.verbose = verbose
+        self.cmd = cmd
 
-        self.dark = settings.get("dark", False)
-
-        # get variables from ucli
-        if self.ucli:
-            variables = self.ucli.list_vars()
+        self.dark = Globals().settings.get("dark", False)
 
     def compose(self) -> ComposeResult:
         """Create child widgets for the app."""
-        # yield Header()
-        yield VariableDisplayList(id="left-pane")
 
-        with Container(id="main-screen"):
-            yield ClockDisplay()
-            with Container():
-                yield RichLog(highlight=True, markup=True, id="log")
-            with Container(id="clock-controls"):
-                yield Button("Clock Back", name="previous_clock", id="previous_clock")
-                yield Button("Clock Next", name="next_clock", id="next_clock")
+        yield Header(show_clock=True)
+
+        with TabbedContent(initial="gui-tab"):
+            with TabPane("Make", id="make-tab"):
+                yield MakeTargets()
+            with TabPane("Log", id="log-tab"):
+                yield RichLog(highlight=True, markup=True, wrap=True, auto_scroll=True, id="log")
+            with TabPane("Variables", id="variables-tab"):
+                yield VariableDisplayList(id="left-pane")
+            with TabPane("GUI", id="gui-tab"):
+                with Container(id="main-screen"):
+                    yield ClockDisplay(id="clock-display")
+                    with Container(id="clock-controls"):
+                        yield Button("Clock Back", name="previous_clock", id="previous_clock")
+                        yield Button("Clock Next", name="next_clock", id="next_clock")
+            with TabPane("Settings", id="settings-tab"):
+                yield SettingsWidget(id="settings")
 
         yield Footer()
 
+    def on_tabs_tab_activated(self, event: Tabs.TabActivated) -> None:
+        """Show the selected tab."""
+        self.query_one(event.tab.id).focus()
+
+    def action_show_tab(self, tab: str) -> None:
+        """Switch to a new tab."""
+        self.get_child_by_type(TabbedContent).active = tab
+
     def on_mount(self) -> None:
-        """Mount the app and update the variables."""
-        self.update_variables()
+        """Mount the app, click a tab, and update the variables."""
+
+        self.title = "SIMV Debugger"
+        self.sub_title = "Made w/ <3 by the Speculative Dispatchers"
+
+        self.query_one(Tabs).focus()
+
+        if self.cmd is not None:
+            self.run_ucli(self.cmd)
+            Globals().variables = self.ucli.list_vars()
+            self.update_variables()
+        else:
+            if self.verbose:
+                self.query_one("#log").write("[dim]No simv executable specified.\n")
+            self.ucli = None
 
         # write the variables to the log
         self.query_one("#log").write("Variables found in simulation:\n")
-        for var in variables:
+        for var in Globals().variables:
             self.query_one("#log").write(f"{var}\n")
 
     def update_variables(self):
@@ -325,8 +388,8 @@ class SIMVApp(App):
         """An action to toggle dark mode."""
         # store in settings
         self.dark = not self.dark
-        settings["dark"] = self.dark
-        save_settings()
+        Globals().settings["dark"] = self.dark
+        Globals().save_settings()
 
     def action_quit(self) -> None:
         """An action to quit the app."""
@@ -399,10 +462,15 @@ class SIMVApp(App):
                 return
         else:
             self.query_one(ClockDisplay).simtime = event.value
+    
+    def on_make_target_run_in_debugger(self, event: MakeTarget.RunInDebugger) -> None:
+        """Run the make target in the visual debugger."""
+        self.query_one("#log").write(f"Running make target {event.target}\n")
+
+        # start ucli for the make target
+        self.run_ucli(event.target)
 
 
 if __name__ == "__main__":
-
-    # if running on its own, don't hook in a UCLI
-    app = SIMVApp()
+    app = SIMVApp(None, verbose=True)
     app.run()
