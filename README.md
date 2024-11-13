@@ -9,7 +9,7 @@ Since this is to be used on UM CAEN computers, there are some project dependenci
 Otherwise, to just use the debugger, you can install a pre-built binary by running the following command (or download and run the binary from the [releases](https://github.com/EricAndrechek/simv-debugger/releases/latest) page instead of piping to bash...):
 
 ```bash
-curl https://github.com/EricAndrechek/simv-debugger/raw/main/install.sh | bash
+curl https://raw.githubusercontent.com/EricAndrechek/simv-debugger/refs/heads/main/install.sh | bash
 ```
 
 ## Usage
