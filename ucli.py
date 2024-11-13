@@ -4,6 +4,18 @@ import select
 import time
 import threading
 import click
+import sentry_sdk
+
+sentry_sdk.init(
+    dsn="https://c15cc5692675ac611b7bb01f8eee2d87@o4506596663427072.ingest.us.sentry.io/4508288337903616",
+    # Set traces_sample_rate to 1.0 to capture 100%
+    # of transactions for tracing.
+    traces_sample_rate=1.0,
+    # Set profiles_sample_rate to 1.0 to profile 100%
+    # of sampled transactions.
+    # We recommend adjusting this value in production.
+    profiles_sample_rate=1.0,
+)
 
 BUSY_WAIT_TIME = 0.001
 
@@ -83,7 +95,7 @@ class UCLI():
         # check that the command ran and didn't immediately exit
         if self.proc.poll() is not None:
             raise FileNotFoundError(f"Executable {self.cmd.split()[0]} does not exist or exited immediately")
-        
+
         # initialize the simulation
         self.run("config -autocheckpoint on")
         # precheckpoint seems to default to run, step, next
@@ -184,34 +196,47 @@ class UCLI():
         top_vars = self.read("show -type", blocking=True, run=True)
         for var in top_vars:
             var_name = var.split(" ")[0]
+            if var_name == "extra":
+                continue
             is_instance = var.split(" ")[1] == "{INSTANCE"
             if is_instance:
                 sub_variables = self._recurse_list_vars(var_name)
                 variables.extend(sub_variables)
             else:
-                variables.append(var_name)
+                variables.append((var_name, " ".join(var.split(" ")[1:])))
         return variables
 
     def _recurse_list_vars(self, var):
         """Recursively list all variables found in the Verilog code currently being simulated"""
 
+        # TODO: where is the "extra" variable coming from?
+
         variables = []
         # get the children of the current variable
-        children = self.read(f"show -type {var}.*", blocking=True, run=True)
+
+        # handle generate blocks
+        if var[0] == "{" and var[-1] == "}":
+            # add the .* to the end inside the brackets
+            tmp_var = var[1:-1] + ".*" + var[-1]
+            children = self.read(f"show -type {tmp_var}", blocking=True, run=True)
+        else:
+            children = self.read(f"show -type {var}.*", blocking=True, run=True)
         for child in children:
             child_name = child.split(" ")[0]
+            if child_name == "extra":
+                continue
             is_instance = child.split(" ")[1] == "{INSTANCE"
             if is_instance:
                 sub_variables = self._recurse_list_vars(child_name)
                 variables.extend(sub_variables)
             else:
-                variables.append(child_name)
+                variables.append((child_name, " ".join(child.split(" ")[1:])))
         return variables
 
     def get_var(self, var):
         """Get the value of a variable in the Verilog code currently being simulated"""
         return self.read(f"get {var}", blocking=True, run=True)[0]
-    
+
     def get_vars(self, vars):
         """Get the values of multiple variables in the Verilog code currently being simulated"""
         variables = {}
@@ -261,16 +286,16 @@ class UCLI():
     #                 values[key] = sub_values[key]
     #     return values
 
-    def set_time(self, target_time, relative=False, blocking=False):
+    def set_time(self, target_time, relative=False):
         """Set the simulation time to a specific (relative?) value in ps"""
 
         # can't go to negative absolute time
         if not relative and target_time < 0:
-            return False
+            return False, ""
 
         # if relative time and target time is 0, do nothing
         if relative and target_time == 0:
-            return True
+            return True, ""
 
         current_time = self.get_time()
 
@@ -287,11 +312,8 @@ class UCLI():
         # this should handle all future times (relative or absolute, but always converted to relative before here)
         # if relative time, just run to there
         if relative:
-            if blocking:
-                self.read(f"run -relative {convert_time_to_str(target_time)}", blocking=True, run=True)
-            else:
-                self.run(f"run -relative {convert_time_to_str(target_time)}")
-            return True
+            output = self.read(f"run -relative {convert_time_to_str(target_time)}", blocking=True, run=True)
+            return True, output
 
         # here we have absolute time and target time < current time
 
@@ -300,16 +322,11 @@ class UCLI():
 
         # if time is 0, do nothing
         if time_diff == 0:
-            return
+            return True, ""
 
         if time_diff > 0:
-            # TODO: how did we get here???
-            # run to the target time
-            if blocking:
-                self.read(f"run -relative {convert_time_to_str(time_diff)}", blocking=True, run=True)
-            else:
-                self.run(f"run -relative {convert_time_to_str(time_diff)}")
-            return True
+            output = self.read(f"run -relative {convert_time_to_str(time_diff)}", blocking=True, run=True)
+            return True, output
 
         # get checkpoints and see which has the closest time (but is still less than the target time)
         checkpoints = self.read("checkpoint -list", blocking=True, run=True)
@@ -329,43 +346,53 @@ class UCLI():
 
         # if no checkpoints are found, go to start and then run to the target time
         if not closest_checkpoint:
-            if blocking:
-                self.read("checkpoint -join 1", blocking=True, run=True)
-                self.read(f"run -relative {convert_time_to_str(target_time)}", blocking=True, run=True)
-            else:
-                self.run("checkpoint -join 1")
-                self.run(f"run -relative {convert_time_to_str(target_time)}")
-            return True
+            self.read("checkpoint -join 1", blocking=True, run=True)
+            output = self.read(f"run -relative {convert_time_to_str(target_time)}", blocking=True, run=True)
+            return True, output
 
         # if a checkpoint is found, go to that checkpoint and then run to the target time
-        if blocking:
-            self.read(f"checkpoint -join {closest_checkpoint}", blocking=True, run=True)
-        else:
-            self.run(f"checkpoint -join {closest_checkpoint}")
+        self.read(f"checkpoint -join {closest_checkpoint}", blocking=True, run=True)
         if closest_time < target_time:
-            if blocking:
-                self.read(f"run -relative {convert_time_to_str(target_time - closest_time)}", blocking=True, run=True)
-            else:
-                self.run(f"run -relative {convert_time_to_str(target_time - closest_time)}")
-        return True
+            output = self.read(f"run -relative {convert_time_to_str(target_time - closest_time)}", blocking=True, run=True)
+            return True, output
 
-    def clock_cycle(self, cycles, blocking=False):
+        return True, "UCLI.py: How did we get here?"
+
+    def clock_cycle(self, cycles):
         """Run the simulation for a number of clock cycles"""
 
         # behind the scenes, should actually convert to time and call set_time
         target_time = (cycles * self.clock_speed) # + self.get_time() # don't need with relative=True
 
-        self.set_time(target_time, relative=True, blocking=blocking)
+        success, output = self.set_time(target_time, relative=True)
+
+        return success, output
+
+    def step_next(self, numLines=10):
+        """Run the simulation to the next step"""
+
+        self.read("step", blocking=True, run=True)
+        code = self.read(f"listing -active {numLines}", blocking=True, run=True)
+
+        return code
 
     # TODO: add a way to run the simulation for a certain amount of time
 
-    # TODO: add checkpoints (or something else?) to go backwards in time
+    # TODO: add a way to run the simulation until a certain variable changes
+
+    # TODO: stop the simulation
+
+    # TODO: reset the simulation
+
+    # TODO: handle crashes / infinite loops
 
     # TODO: run gdb commands with cbug::gdb gdb-cmd
 
     # TODO: add breakpoints
 
     # TODO: add support for changing variables
+
+    # TODO: add ucli command line input
 
     # -------------------- private methods --------------------
 
@@ -415,7 +442,7 @@ class UCLI():
                     ran_cmd = self._run()
                     if not ran_cmd:
                         self.waitingForPrompt = True
-        
+
         # TODO: handle the case where the process has ended
         # ie, should we restart the process? or just let it die?
 

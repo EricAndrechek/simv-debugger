@@ -24,6 +24,19 @@ import time
 
 from settings import Globals
 
+import sentry_sdk
+
+sentry_sdk.init(
+    dsn="https://c15cc5692675ac611b7bb01f8eee2d87@o4506596663427072.ingest.us.sentry.io/4508288337903616",
+    # Set traces_sample_rate to 1.0 to capture 100%
+    # of transactions for tracing.
+    traces_sample_rate=1.0,
+    # Set profiles_sample_rate to 1.0 to profile 100%
+    # of sampled transactions.
+    # We recommend adjusting this value in production.
+    profiles_sample_rate=1.0,
+)
+
 
 class VariableDisplay(Widget):
     """A static widget that displays the value of a variable."""
@@ -39,12 +52,14 @@ class VariableDisplay(Widget):
     # dictionary of values mapped to time
     values = reactive({}, recompose=True)
 
-    def __init__(self, variable: str, id=None) -> None:
+    def __init__(self, variable: str, id=None, var_type="") -> None:
         self.var_name = variable
+        self.var_type = var_type
         super().__init__(id=id)
 
     def on_mount(self) -> None:
-        pass
+        self.query_one(Static).tooltip = f"Type: {self.var_type}"
+        self.query_one(Checkbox).tooltip = f"Remove {self.var_name} from the watch list"
 
     def compose(self) -> ComposeResult:
         with Horizontal(classes="variable_content"):
@@ -56,26 +71,57 @@ class VariableDisplay(Widget):
                 id=f"{self.var_name.replace('.', '_dot_')}-button",
                 classes="variable_remove",
             )
+            yield Button("Drivers", id=f"{self.var_name.replace('.', '_dot_')}-drivers", classes="variable_drivers")
+            yield Button("Loads", id=f"{self.var_name.replace('.', '_dot_')}-loads", classes="variable_loads")
+
             # TODO: sparkline of values over time here
 
     def on_checkbox_changed(self, event):
         self.post_message(self.Selected(self.var_name))
 
+    def on_button_pressed(self, event):
+        if Globals().ucli:
+            if event.button.id.endswith("-drivers"):
+                read = Globals().ucli.read(f"drivers {self.var_name} -full", blocking=True, run=True)
+                if read == "":
+                    read = "None"
+                # if read is a list, convert to a string
+                if isinstance(read, list):
+                    read = "\n".join(read)
+                self.notify(
+                    f"{read}", severity="information", timeout=15
+                )
+
+            elif event.button.id.endswith("-loads"):
+                read = Globals().ucli.read(f"loads {self.var_name} -full", blocking=True, run=True)
+                if read == "":
+                    read = "None"
+                # if read is a list, convert to a string
+                if isinstance(read, list):
+                    read = "\n".join(read)
+                self.notify(f"{read}", severity="information", timeout=15)
+
+    def watch_var_val(self, old_val, new_val):
+        self.values[Globals().simtime] = new_val
+
 
 class VariableDisplayList(Widget):
     """A static widget that displays the value of all watched variables."""
 
-    all_variables = reactive(list, recompose=True)
+    all_variables = reactive({}, recompose=True)
     watched_variables = reactive(list, recompose=True)
     unused_variables = reactive(list, recompose=True)
     dropdown_options = reactive(list, recompose=True)
 
     def update_variable_list(self):
-        self.all_variables = Globals().variables
+        # turn Globals().variables list of tuples into a dictionary
+        self.all_variables = {}
+        for var_tuple in Globals().variables:
+            self.all_variables[var_tuple[0]] = var_tuple[1]
 
         if "watching" in Globals().settings:
             self.watched_variables = list(Globals().settings["watching"].keys())
-            # remove any variables that are not in the global list of variables
+            # remove any variables that are not in the all_variables dictionary
             self.watched_variables = [
                 var for var in self.watched_variables if var in self.all_variables
             ]
@@ -114,7 +160,7 @@ class VariableDisplayList(Widget):
             yield Static("Variables being watched:")
             with Container(id="variable_list"):
                 for var in self.watched_variables:
-                    yield VariableDisplay(var, id=f"vd_{var.replace('.', '_dot_')}")
+                    yield VariableDisplay(var, id=f"vd_{var.replace('.', '_dot_')}", var_type=self.all_variables[var])
         else:
             yield Static("No variables being watched")
 

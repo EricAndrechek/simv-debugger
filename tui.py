@@ -22,6 +22,19 @@ from make import MakeTargets, MakeTarget, load_makefile
 from codeview import CodeWidget
 from ucli import UCLI
 
+import sentry_sdk
+
+sentry_sdk.init(
+    dsn="https://c15cc5692675ac611b7bb01f8eee2d87@o4506596663427072.ingest.us.sentry.io/4508288337903616",
+    # Set traces_sample_rate to 1.0 to capture 100%
+    # of transactions for tracing.
+    traces_sample_rate=1.0,
+    # Set profiles_sample_rate to 1.0 to profile 100%
+    # of sampled transactions.
+    # We recommend adjusting this value in production.
+    profiles_sample_rate=1.0,
+)
+
 # TODO: how to get values from structs in vars?
 # TODO: should remove variable from variables list if it is in watching and add back if removed
 
@@ -93,8 +106,10 @@ class SIMVApp(App):
 
         try:
             self.ucli = UCLI(cmd)
+            Globals().ucli = self.ucli
         except (FileNotFoundError, ValueError) as e:
             self.ucli = None
+            Globals().ucli = None
             self.post_message(ucliData(msg=e, error=True))
 
             # if the error is a FileNotFoundError, try to help
@@ -132,8 +147,9 @@ class SIMVApp(App):
         self.verbose = verbose
         self.cmd = cmd
         self.ucli = None
+        Globals().ucli = None
 
-        self.dark = Globals().settings.get("dark", False)
+        self.dark = Globals().settings.get("dark", True)
 
     def compose(self) -> ComposeResult:
         """Create child widgets for the app."""
@@ -196,7 +212,6 @@ class SIMVApp(App):
                 self.query_one("#log").write(f"{message.msg}\n")
 
         if message.cmd == "update_variable_list":
-            self.query_one(VariableDisplayList).all_variables = Globals().variables
             self.query_one(VariableDisplayList).update_variable_list()
 
             self.run_worker(
@@ -209,19 +224,22 @@ class SIMVApp(App):
             # write the variables to the log
             self.query_one("#log").write("Variables found in simulation:\n")
             for var in Globals().variables:
-                if var != "extra":
-                    self.query_one("#log").write(f"{var}\n")
+                if var[0] != "extra":
+                    self.query_one("#log").write(f"{var[0]}: {var[1]}\n")
         elif message.cmd == "update_clock":
             self.query_one(ClockDisplay).clock = message.data
         elif message.cmd == "update_simtime":
             self.query_one(ClockDisplay).simtime = message.data
+            Globals().simtime = message.data
         elif message.cmd is not None and message.cmd.startswith("update_var_"):
             var_name = message.cmd.split("update_var_")[1]
             self.query_one(f"#vd_{var_name} .variable_value").update(message.data)
         elif message.cmd == "update_code":
             if isinstance(message.data, str):
+                self.query_one("#code").clear()
                 self.query_one("#code").write(Syntax(message.data, "verilog"))
             else:
+                self.query_one("#code").clear()
                 for line in message.data:
                     self.query_one("#code").write(Syntax(line, "verilog"))
 
@@ -232,8 +250,13 @@ class SIMVApp(App):
             if self.ucli:
                 Globals().variables = self.ucli.list_vars()
                 self.post_message(ucliData(cmd="update_variable_list"))
+                self.notify(
+                    f"VCS setup and ready to use!", severity="information", timeout=2
+                )
                 return
         self.ucli = None
+        Globals().ucli = None
+        self.notify(f"No simv executable provided", severity="warning", timeout=2)
         self.post_message(ucliData(msg="No simv executable provided", error=True))
 
     def on_mount(self) -> None:
@@ -343,7 +366,13 @@ class SIMVApp(App):
 
     def _action_next_clock(self) -> None:
         if self.ucli:
-            clock = self.ucli.clock_cycle(1)
+            success, output = self.ucli.clock_cycle(1)
+            if success:
+                if output != "":
+                    self.post_message(ucliData(msg=output))
+            else:
+                self.post_message(ucliData(msg="Error stepping to next clock cycle.\n", error=True))
+
             self.run_worker(
                 self.update_variables,
                 thread=True,
@@ -357,7 +386,13 @@ class SIMVApp(App):
 
     def _action_previous_clock(self) -> None:
         if self.ucli:
-            clock = self.ucli.clock_cycle(-1)
+            success, output = self.ucli.clock_cycle(-1)
+            if success:
+                if output != "":
+                    self.post_message(ucliData(msg=output))
+            else:
+                self.post_message(ucliData(msg="Error stepping to previous clock cycle.\n", error=True))
+
             self.run_worker(
                 self.update_variables,
                 thread=True,
@@ -371,7 +406,7 @@ class SIMVApp(App):
 
     def _action_next_line(self) -> None:
         if self.ucli:
-            code = self.ucli.read("step", blocking=True, run=True)
+            code = self.ucli.step_next()
             self.post_message(ucliData(data=code, cmd="update_code"))
             self.run_worker(
                 self.update_variables,
@@ -410,12 +445,19 @@ class SIMVApp(App):
             self.action_next_line()
 
     def on_clock_display_submit(self, event: ClockDisplay.Submit) -> None:
+        # TODO: make this happen in background thread
         if self.ucli:
             try:
                 target_time = int(event.value)
-                success = self.ucli.set_time(target_time)
+                success, output = self.ucli.set_time(target_time)
+
                 if success:
-                    self.query_one("#log").write(f"Simulation time set to {target_time} ps.\n")
+                    self.post_message(ucliData(msg=f"Simulation time set to {target_time} ps.\n"))
+
+                if output != "":
+                    self.post_message(ucliData(msg=output))
+
+                if success:
                     self.run_worker(
                         self.update_variables,
                         thread=True,
@@ -423,9 +465,9 @@ class SIMVApp(App):
                         group="update_variables",
                     )
                 else:
-                    self.query_one("#log").write("Error setting simulation time.\n")
+                    self.post_message(ucliData(msg="Error setting simulation time.\n", error=True))
             except ValueError:
-                self.query_one("#log").write("Invalid time format. Please enter a positive integer.\n")
+                self.post_message(ucliData(msg="Invalid time format. Please enter a positive integer.\n", error=True))
                 return
 
     def on_make_target_log_data(self, message: MakeTarget.LogData) -> None:
@@ -435,6 +477,8 @@ class SIMVApp(App):
     def on_make_target_run_in_debugger(self, event: MakeTarget.RunInDebugger) -> None:
         """Run the make target in the visual debugger."""
         self.query_one("#log").write(f"Running {event.target}\n")
+
+        self.notify(f"Running {event.target}...", severity="information", timeout=2)
 
         self.cmd = event.target + " -ucli -suppress=ASLR_DETECTED_INFO -ucli2Proc"
 

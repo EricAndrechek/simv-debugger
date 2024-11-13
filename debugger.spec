@@ -1,15 +1,20 @@
 # -*- mode: python ; coding: utf-8 -*-
 from PyInstaller.utils.hooks import collect_submodules
+from PyInstaller.utils.hooks import collect_all
 
+datas = [('debugger.tcss', '.')]
+binaries = []
 hiddenimports = []
 hiddenimports += collect_submodules('textual.widgets')
+tmp_ret = collect_all('sentry_sdk')
+datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 
 
 a = Analysis(
     ['main.py'],
     pathex=[],
-    binaries=[],
-    datas=[('debugger.tcss', '.')],
+    binaries=binaries,
+    datas=datas,
     hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},
