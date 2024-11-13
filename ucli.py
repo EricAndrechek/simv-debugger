@@ -163,14 +163,19 @@ class UCLI():
         """Special function to get the clock cycle and parse it instead of relying on get_var"""
 
         total_time = self.get_time()
+        if total_time == -1:
+            return -1
         cc = total_time // self.clock_speed
         return cc
 
     def get_time(self):
         """Special function to get the simulation time and parse it instead of relying on get_var"""
 
-        total_time = self.read("senv time", blocking=True, run=True)[0]
-        return convert_time(total_time)
+        try:
+            total_time = self.read("senv time", blocking=True, run=True)[0]
+            return convert_time(total_time)
+        except IndexError:
+            return -1
 
     def list_vars(self):
         """List all variables found in the Verilog code currently being simulated"""
@@ -426,11 +431,17 @@ class UCLI():
     def close(self):
         self.stop = True
         if "proc" in dir(self):
-            self.proc.stdin.close()
-            self.proc.stdout.close()
-            self.proc.stderr.close()
-            self.proc.kill()
-            self.proc.wait()
+            # run exit command to close the simulation
+            try:
+                self.proc.stdin.write("exit\n".encode())
+                self.proc.stdin.flush()
+                self.proc.stdin.close()
+                self.proc.stdout.close()
+                self.proc.stderr.close()
+                self.proc.kill()
+                # self.proc.wait()
+            except (BrokenPipeError, ValueError):
+                pass
 
         # self.thread.join()
 

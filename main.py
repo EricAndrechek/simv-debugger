@@ -4,7 +4,20 @@ import os
 import requests
 import click
 
-VERSION = "v1.0.16"
+import sentry_sdk
+
+sentry_sdk.init(
+    dsn="https://c15cc5692675ac611b7bb01f8eee2d87@o4506596663427072.ingest.us.sentry.io/4508288337903616",
+    # Set traces_sample_rate to 1.0 to capture 100%
+    # of transactions for tracing.
+    traces_sample_rate=1.0,
+    # Set profiles_sample_rate to 1.0 to profile 100%
+    # of sampled transactions.
+    # We recommend adjusting this value in production.
+    profiles_sample_rate=1.0,
+)
+
+VERSION = "v1.0.17"
 
 def main(cmd, verbose=False):
     """Main function to run the UCLI and TUI together."""
@@ -91,7 +104,6 @@ def updater(update=False, check=True, verbose=False):
     else:
         if verbose:
             click.secho("Skipping update check...", fg="black")
-
 
 
 def check_version(check=False):

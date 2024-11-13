@@ -1,5 +1,5 @@
 from textual.app import App, ComposeResult
-from textual.containers import ScrollableContainer, Horizontal, Vertical, Container
+from textual.containers import ScrollableContainer, Horizontal, Vertical, Container, VerticalScroll
 from textual.widgets import (
     Button,
     Footer,
@@ -14,6 +14,7 @@ from textual.widgets import (
     Tab,
     TabbedContent,
     TabPane,
+    Switch
 )
 from textual.reactive import reactive
 from textual import events
@@ -49,12 +50,47 @@ class Globals:
     def load_settings(self):
         if os.path.exists(".settings.json"):
             with open(".settings.json", "r") as f:
-                self.settings = json.load(f)
+                try:
+                    self.settings = json.load(f)
+                except json.JSONDecodeError:
+                    self.settings = {}
         else:
             self.settings = {}
+    
+    def change_tab(self, tab):
+        self.settings["tab"] = tab
+        self.save_settings()
 
+class SettingSwitch(Widget):
+    def __init__(self, id=None, name="", value=False):
+
+        self.switch_name = name
+        self.value = reactive(value)
+        if self.switch_name != "":
+            # check if the setting is in the settings
+            if self.switch_name in Globals().settings:
+                self.value = Globals().settings[self.switch_name]
+            self.switch_name += ":      "
+
+        super().__init__(id=id)
+
+    def compose(self) -> ComposeResult:
+        with Horizontal():
+            yield Label(self.switch_name)
+            yield Switch(value=self.value)
+
+    def on_switch_changed(self, event):
+        self.value = event.value
+        Globals().settings[self.switch_name.split(":")[0]] = event.value
+        Globals().save_settings()
+        # TODO: throw event to update other widgets as needed
 
 class SettingsWidget(Widget):
+
+    # TODO: move verbose setting here?
+    # verbose = reactive(False)
+    # TODO: move update process and setting here?
+
     def __init__(self, id=None):
         super().__init__(id=id)
 
@@ -62,12 +98,4 @@ class SettingsWidget(Widget):
         # return a container with various settings
         # that can be toggled
         with Container():
-            with Vertical():
-                yield Label("Settings")
-                yield Checkbox("Verbose")
-                yield Checkbox("Show Clock")
-                yield Checkbox("Show Reset")
-                yield Checkbox("Show Clock Count")
-                yield Checkbox("Show Memory Writeback")
-                yield Checkbox("Show Register")
-
+            yield SettingSwitch(name="Remember last tab", value=True)

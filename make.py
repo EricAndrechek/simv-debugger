@@ -53,22 +53,10 @@ async def load_makefile():
 class MakeTarget(Widget):
     """Widget to show a make target that can be run and run it"""
 
-    DEFAULT_CSS = """
-    MakeTarget {
-        width: auto;
-        height: auto;
-    }
-
-    MakeTarget Button {
-        width: auto;
-        height: auto;
-    }
-    """
-
     class LogData(Message):
-        def __init__(self, text: str):
+        def __init__(self, data: str):
             super().__init__()
-            self.text = text
+            self.data = data
 
     class RunInDebugger(Message):
         def __init__(self, target: str):
@@ -146,7 +134,7 @@ class MakeTarget(Widget):
             self.post_message(self.LogData(f"Running {self.target} in the visual debugger..."))
             # TODO: can we compile the simv first and then run it in the debugger?
             # use make -n to get the commands that would be run
-            self.post_message(self.RunInDebugger(f"make {self.target}"))
+            self.post_message(self.RunInDebugger(f"./build/{self.target.replace('.out', '.simv')}"))
 
             for button in self.query(Button):
                 button.disabled = False
@@ -159,51 +147,6 @@ class MakeTarget(Widget):
 
 class MakeTargets(Widget):
     """MakeTargets widget to show make commands that can be run"""
-
-    DEFAULT_CSS = """
-    MakeTargets {
-        width: auto;
-        height: auto;
-    }
-
-    MakeTargets Label {
-        width: 100%;
-        content-align-horizontal: center;
-        height: auto;
-        text-style: bold;
-    }
-
-    MakeTargets Static {
-        width: 100%;
-        content-align-horizontal: center;
-        height: auto;
-    }
-
-    MakeTargets Container#make-grid {
-        margin-top: 1;
-        layout: grid;
-        grid-size: 2;
-        grid-gutter: 1;
-    }
-
-    MakeTargets VerticalScroll {
-        background: $boost;
-        width: auto;
-        height: 100%;
-        padding-left: 1;
-        padding-top: 1;
-    }
-
-    MakeTargets RichLog {
-        width: auto;
-        padding: 1;
-    }
-
-    MakeTargets VerticalScroll MakeTarget {
-        width: auto;
-        height: 5;
-    }
-    """
 
     makefile_targets = reactive(list, recompose=True)
 
@@ -218,21 +161,14 @@ class MakeTargets(Widget):
         yield Label("Make Targets")
         yield Static("Click a make target to run it. If the target ends in \".out\", it will run in the visual debugger.")
 
-        with Container(id="make-grid"):
-            if len(self.makefile_targets) == 0:
-                with VerticalScroll():
-                    yield Label("No make targets found")
-            else:
-                with VerticalScroll():
-                    for target in self.makefile_targets:
-                        yield MakeTarget(target)
-                        # yield MakeTarget(target, id=target.replace(" ", "_").replace(".", "_dot_"))
-
-            yield RichLog(markup=True, wrap=True, auto_scroll=True, id="make_log")
-
-    def on_make_target_log_data(self, message: MakeTarget.LogData) -> None:
-        self.query_one(RichLog).write(message.text)
-
+        if len(self.makefile_targets) == 0:
+            with ScrollableContainer():
+                yield Label("No make targets found")
+        else:
+            with ScrollableContainer():
+                for target in self.makefile_targets:
+                    yield MakeTarget(target)
+                    # yield MakeTarget(target, id=target.replace(" ", "_").replace(".", "_dot_"))
 
 if __name__ == "__main__":
     # print the make commands that can be run

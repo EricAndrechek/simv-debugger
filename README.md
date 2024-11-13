@@ -25,6 +25,22 @@ curl https://github.com/EricAndrechek/simv-debugger/raw/main/install.sh | bash
 ./debugger ./path/to/simv +MEMORY=programs/mem/test_1.mem +OUTPUT=output/test_1.out
 ```
 
+## Features
+
+- [ ] Load and display the source code
+- [x] Display the current line of code
+- [ ] Display the current instruction
+- [x] Display the current variable values
+- [x] Go forward and backward in time
+- [ ] Set breakpoints
+- [x] Step through the code
+- [x] Run the code
+- [x] Handle makefiles and auto-detect targets
+- [x] Auto-update
+- [x] Automatically log and send errors to the developers
+- [x] Package as a standalone executable for easy installation and use on CAEN
+- [x] Portable settings file for easy configuration and sharing
+
 ## Development
 
 Clone the repo locally (like to CAEN) and either run the `develop.sh` script, or run the following commands to set up python:
