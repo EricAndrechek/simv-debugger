@@ -27,19 +27,20 @@ curl https://raw.githubusercontent.com/EricAndrechek/simv-debugger/refs/heads/ma
 
 ## Features
 
-- [ ] Load and display the source code
+- [x] Load and display the source code
 - [x] Display the current line of code
-- [ ] Display the current instruction
+- [x] Display the current instruction
 - [x] Display the current variable values
 - [x] Go forward and backward in time
 - [ ] Set breakpoints
 - [x] Step through the code
 - [x] Run the code
-- [x] Handle makefiles and auto-detect targets
+- [ ] Handle makefiles and auto-detect targets
 - [x] Auto-update
 - [x] Automatically log and send errors to the developers
 - [x] Package as a standalone executable for easy installation and use on CAEN
 - [x] Portable settings file for easy configuration and sharing
+- [x] Show drivers and loads of registers/variables
 
 ## Development
 

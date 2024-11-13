@@ -99,9 +99,11 @@ class SIMVApp(App):
 
         if not os.path.exists(cmd.split()[0]):
             self.post_message(ucliData(msg=f"[red]Executable {cmd.split()[0]} does not exist\n"))
+            self.notify(f"Executable {cmd.split()[0]} does not exist", severity="warning", timeout=2)
             # self.exit()
             return
         if self.verbose:
+            self.notify(f"Booting up simv simulation...", severity="information", timeout=2)
             self.post_message(ucliData(msg="[dim]Booting up simv simulation...\n"))
 
         try:
@@ -110,6 +112,7 @@ class SIMVApp(App):
         except (FileNotFoundError, ValueError) as e:
             self.ucli = None
             Globals().ucli = None
+            self.notify(f"Error booting up simv simulation: {e}", severity="error", timeout=5)
             self.post_message(ucliData(msg=e, error=True))
 
             # if the error is a FileNotFoundError, try to help
@@ -305,7 +308,7 @@ class SIMVApp(App):
 
             # update the values of the variables being watched
             for var in self.query(VariableDisplay):
-                var_name = var.var_name.replace(".", "_dot_")
+                var_name = var.var_name.replace(".", "-dot-").replace("[", "-lbr-").replace("]", "-rbr-").replace('$', '-ds-')
 
                 var_val = self.ucli.get_var(var.var_name)
 

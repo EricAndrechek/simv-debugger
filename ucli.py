@@ -196,7 +196,9 @@ class UCLI():
         top_vars = self.read("show -type", blocking=True, run=True)
         for var in top_vars:
             var_name = var.split(" ")[0]
-            if var_name == "extra":
+            if len(var_name) >= 3 and var_name[0] == "{" and var_name[-1] == "}":
+                var_name = var_name[1:-1]
+            if var_name == "extra" or var_name == "":
                 continue
             is_instance = var.split(" ")[1] == "{INSTANCE"
             if is_instance:
@@ -215,15 +217,15 @@ class UCLI():
         # get the children of the current variable
 
         # handle generate blocks
-        if var[0] == "{" and var[-1] == "}":
-            # add the .* to the end inside the brackets
-            tmp_var = var[1:-1] + ".*" + var[-1]
-            children = self.read(f"show -type {tmp_var}", blocking=True, run=True)
-        else:
-            children = self.read(f"show -type {var}.*", blocking=True, run=True)
+        if len(var) >= 3 and var[0] == "{" and var[-1] == "}":
+            var = var[1:-1]
+        
+        children = self.read(f"show -type {{{var}.*}}", blocking=True, run=True)
         for child in children:
             child_name = child.split(" ")[0]
-            if child_name == "extra":
+            if len(child_name) >= 3 and child_name[0] == "{" and child_name[-1] == "}":
+                child_name = child_name[1:-1]
+            if child_name == "extra" or child_name == "":
                 continue
             is_instance = child.split(" ")[1] == "{INSTANCE"
             if is_instance:
@@ -235,7 +237,7 @@ class UCLI():
 
     def get_var(self, var):
         """Get the value of a variable in the Verilog code currently being simulated"""
-        return self.read(f"get {var}", blocking=True, run=True)[0]
+        return self.read(f"get {{{var}}}", blocking=True, run=True)[0]
 
     def get_vars(self, vars):
         """Get the values of multiple variables in the Verilog code currently being simulated"""

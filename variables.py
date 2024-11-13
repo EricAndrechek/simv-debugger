@@ -68,12 +68,12 @@ class VariableDisplay(Widget):
             yield Label(f"{self.var_val}", classes="variable_value")
             yield Checkbox(
                 "",
-                id=f"{self.var_name.replace('.', '_dot_')}-button",
+                id=f"{self.var_name.replace('.', '-dot-').replace('[', '-lbr-').replace(']', '-rbr-').replace('$', '-ds-')}-button",
                 classes="variable_remove",
             )
             with Collapsible(collapsed=True, title="Show Drivers and Loads"):
                 yield RichLog(
-                    id=f"{self.var_name.replace('.', '_dot_')}-drivers",
+                    id=f"{self.var_name.replace('.', '-dot-').replace('[', '-lbr-').replace(']', '-rbr-').replace('$', '-ds-')}-drivers",
                     highlight=True,
                     markup=True,
                     wrap=True,
@@ -84,14 +84,14 @@ class VariableDisplay(Widget):
 
     def on_collapsible_expanded(self, event):
         if Globals().ucli is not None:
-            drivers = Globals().ucli.read(f"drivers {self.var_name} -full", blocking=True, run=True)
+            drivers = Globals().ucli.read(f"drivers {{{self.var_name}}} -full", blocking=True, run=True)
             if drivers == "":
                 drivers = "None"
             # if read is a list, convert to a string
             if isinstance(drivers, list):
                 drivers = "\n".join(drivers)
             loads = Globals().ucli.read(
-                f"loads {self.var_name} -full", blocking=True, run=True
+                f"loads {{{self.var_name}}} -full", blocking=True, run=True
             )
             if loads == "":
                 loads = "None"
@@ -169,7 +169,7 @@ class VariableDisplayList(Widget):
             yield Static("Variables being watched:")
             with Container(id="variable_list"):
                 for var in self.watched_variables:
-                    yield VariableDisplay(var, id=f"vd_{var.replace('.', '_dot_')}", var_type=self.all_variables[var])
+                    yield VariableDisplay(var, id=f"vd_{var.replace('.', '-dot-').replace('[', '-lbr-').replace(']', '-rbr-').replace('$', '-ds-')}", var_type=self.all_variables[var])
         else:
             yield Static("No variables being watched")
 
@@ -190,7 +190,7 @@ class VariableDisplayList(Widget):
 
         # TODO: check if in watch list and remove it if so
 
-        var = message.id.split("-button")[0].replace("_dot_", ".")
+        var = message.id.split("-button")[0].replace("-dot-", ".").replace("-lbr-", "[").replace("-rbr-", "]").replace("-ds-", "$")
 
         if "watching" in Globals().settings:
             watching = Globals().settings["watching"]
@@ -206,7 +206,7 @@ class VariableDisplayList(Widget):
             Globals().save_settings()
 
         if "." in var:
-            var = var.replace(".", "_dot_")
+            var = var.replace(".", "-dot-").replace("[", "-lbr-").replace("]", "-rbr-").replace('$', '-ds-')
         self.query_one(f"#vd_{var}").remove()
 
         # clear input from the filter
