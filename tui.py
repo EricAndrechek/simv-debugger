@@ -245,10 +245,13 @@ class SIMVApp(App):
 
     def mount_work(self):
         if self.cmd is not None:
+            self.notify(f"Running simv executable `{self.cmd}`...", severity="information", timeout=10)
             self.post_message(ucliData(msg=f"Running simv executable `{self.cmd}`...\n"))
             self.run_ucli(self.cmd)
             if self.ucli:
-                Globals().variables = self.ucli.list_vars()
+                all_vars = self.ucli.list_vars()
+                sorted_vars = sorted(all_vars, key=lambda x: x[0])
+                Globals().variables = sorted_vars
                 self.post_message(ucliData(cmd="update_variable_list"))
                 self.notify(
                     f"VCS setup and ready to use!", severity="information", timeout=2
@@ -297,6 +300,8 @@ class SIMVApp(App):
                 self.post_message(ucliData(msg="Simulation time not available. This probably means you ran past the last clock cycle and the simulation ended.\n", error=True))
             else:
                 self.post_message(ucliData(data=simtime, cmd="update_simtime"))
+
+            self.update_code_view()
 
             # update the values of the variables being watched
             for var in self.query(VariableDisplay):
@@ -364,6 +369,11 @@ class SIMVApp(App):
             self.query_one("#log").write("Simulation exited.\n")
         self.exit()
 
+    def update_code_view(self):
+        if self.ucli:
+            code = self.ucli.get_code()
+            self.post_message(ucliData(data=code, cmd="update_code"))
+
     def _action_next_clock(self) -> None:
         if self.ucli:
             success, output = self.ucli.clock_cycle(1)
@@ -406,8 +416,7 @@ class SIMVApp(App):
 
     def _action_next_line(self) -> None:
         if self.ucli:
-            code = self.ucli.step_next()
-            self.post_message(ucliData(data=code, cmd="update_code"))
+            self.ucli.step_next()
             self.run_worker(
                 self.update_variables,
                 thread=True,

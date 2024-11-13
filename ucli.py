@@ -371,7 +371,12 @@ class UCLI():
     def step_next(self, numLines=10):
         """Run the simulation to the next step"""
 
-        self.read("step", blocking=True, run=True)
+        return self.read("step", blocking=True, run=True)
+
+
+    def get_code(self, numLines=10):
+        """Get the current code listing from the simulation"""
+
         code = self.read(f"listing -active {numLines}", blocking=True, run=True)
 
         return code

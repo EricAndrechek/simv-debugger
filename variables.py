@@ -6,7 +6,7 @@ from textual.containers import (
     Container,
     VerticalScroll,
 )
-from textual.widgets import Button, Footer, Header, Static, Label, Input, Pretty, Checkbox, RichLog, Tabs, Tab, TabbedContent, TabPane, Select
+from textual.widgets import Button, Footer, Header, Static, Label, Input, Pretty, Checkbox, RichLog, Tabs, Tab, TabbedContent, TabPane, Select, Collapsible
 from textual.reactive import reactive
 from textual import events
 from textual.suggester import SuggestFromList
@@ -71,35 +71,43 @@ class VariableDisplay(Widget):
                 id=f"{self.var_name.replace('.', '_dot_')}-button",
                 classes="variable_remove",
             )
-            yield Button("Drivers", id=f"{self.var_name.replace('.', '_dot_')}-drivers", classes="variable_drivers")
-            yield Button("Loads", id=f"{self.var_name.replace('.', '_dot_')}-loads", classes="variable_loads")
+            with Collapsible(collapsed=True, title="Show Drivers and Loads"):
+                yield RichLog(
+                    id=f"{self.var_name.replace('.', '_dot_')}-drivers",
+                    highlight=True,
+                    markup=True,
+                    wrap=True,
+                    auto_scroll=True,
+                )
 
             # TODO: sparkline of values over time here
 
+    def on_collapsible_expanded(self, event):
+        if Globals().ucli is not None:
+            drivers = Globals().ucli.read(f"drivers {self.var_name} -full", blocking=True, run=True)
+            if drivers == "":
+                drivers = "None"
+            # if read is a list, convert to a string
+            if isinstance(drivers, list):
+                drivers = "\n".join(drivers)
+            loads = Globals().ucli.read(
+                f"loads {self.var_name} -full", blocking=True, run=True
+            )
+            if loads == "":
+                loads = "None"
+            # if read is a list, convert to a string
+            if isinstance(loads, list):
+                loads = "\n".join(loads)
+
+            self.query_one(RichLog).clear()
+            self.query_one(RichLog).write("[dim] Note: These do not auto-update - please collapse and expand to manually update these values.")
+            self.query_one(RichLog).write("[bold] Drivers:")
+            self.query_one(RichLog).write(drivers)
+            self.query_one(RichLog).write("[bold] Loads:")
+            self.query_one(RichLog).write(loads)
+
     def on_checkbox_changed(self, event):
         self.post_message(self.Selected(self.var_name))
-
-    def on_button_pressed(self, event):
-        if Globals().ucli:
-            if event.button.id.endswith("-drivers"):
-                read = Globals().ucli.read(f"drivers {self.var_name} -full", blocking=True, run=True)
-                if read == "":
-                    read = "None"
-                # if read is a list, convert to a string
-                if isinstance(read, list):
-                    read = "\n".join(read)
-                self.notify(
-                    f"{read}", severity="information", timeout=15
-                )
-
-            elif event.button.id.endswith("-loads"):
-                read = Globals().ucli.read(f"loads {self.var_name} -full", blocking=True, run=True)
-                if read == "":
-                    read = "None"
-                # if read is a list, convert to a string
-                if isinstance(read, list):
-                    read = "\n".join(read)
-                self.notify(f"{read}", severity="information", timeout=15)
 
     def watch_var_val(self, old_val, new_val):
         self.values[Globals().simtime] = new_val
@@ -115,28 +123,29 @@ class VariableDisplayList(Widget):
 
     def update_variable_list(self):
         # turn Globals().variables list of tuples into a dictionary
-        self.all_variables = {}
-        for var_tuple in Globals().variables:
-            self.all_variables[var_tuple[0]] = var_tuple[1]
+        if hasattr(Globals(), "variables") and Globals().variables is not None:
+            self.all_variables = {}
+            for var_tuple in Globals().variables:
+                self.all_variables[var_tuple[0]] = var_tuple[1]
 
-        if "watching" in Globals().settings:
-            self.watched_variables = list(Globals().settings["watching"].keys())
-            # remove any variables that are not in the all_variables dictionary
-            self.watched_variables = [
-                var for var in self.watched_variables if var in self.all_variables
+            if "watching" in Globals().settings:
+                self.watched_variables = list(Globals().settings["watching"].keys())
+                # remove any variables that are not in the all_variables dictionary
+                self.watched_variables = [
+                    var for var in self.watched_variables if var in self.all_variables
+                ]
+            else:
+                self.watched_variables = []
+
+            self.unused_variables = [
+                var for var in self.all_variables if var not in self.watched_variables
             ]
-        else:
-            self.watched_variables = []
 
-        self.unused_variables = [
-            var for var in self.all_variables if var not in self.watched_variables
-        ]
-
-        if self.is_mounted:
-            self.dropdown_options = [(var, var) for var in self.unused_variables]
-            self.query_one("#add_var").set_options(self.dropdown_options)
-            self.mutate_reactive(VariableDisplayList.dropdown_options)
-            self.query_one("#add_var").set_options(self.dropdown_options)
+            if self.is_mounted:
+                self.dropdown_options = [(var, var) for var in self.unused_variables]
+                self.query_one("#add_var").set_options(self.dropdown_options)
+                self.mutate_reactive(VariableDisplayList.dropdown_options)
+                self.query_one("#add_var").set_options(self.dropdown_options)
 
     def __init__(self, *children, name = None, id = None, classes = None, disabled = False):
         super().__init__(*children, name=name, id=id, classes=classes, disabled=disabled)
@@ -165,7 +174,17 @@ class VariableDisplayList(Widget):
             yield Static("No variables being watched")
 
         yield Label("Add a variable to watch")
+        yield Input(placeholder="Filter options")
         yield Select(prompt="Select a variable to add", id="add_var", allow_blank=True, options=self.dropdown_options)
+
+    def on_input_changed(self, event: Input.Changed) -> None:
+        filter_text = event.value.lower()
+        temp_options = [
+            (label, value)
+            for label, value in self.dropdown_options
+            if filter_text in label.lower()
+        ]
+        self.query_one("#add_var").set_options(temp_options)
 
     def on_variable_display_selected(self, message):
 
@@ -189,6 +208,9 @@ class VariableDisplayList(Widget):
         if "." in var:
             var = var.replace(".", "_dot_")
         self.query_one(f"#vd_{var}").remove()
+
+        # clear input from the filter
+        self.query_one(Input).value = ""
 
         self.dropdown_options = [(var, var) for var in self.unused_variables]
         self.query_one("#add_var").set_options(self.dropdown_options)

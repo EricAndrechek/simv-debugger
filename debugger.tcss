@@ -138,13 +138,6 @@ VariableDisplay {
                 height: auto;
             }
         }
-
-        Button {
-            width: auto;
-            height: auto;
-            margin: 0 1;
-            background: $boost;
-        }
     }
 }
 
