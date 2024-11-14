@@ -3,7 +3,7 @@ from PyInstaller.utils.hooks import collect_submodules
 from PyInstaller.utils.hooks import collect_all
 
 datas = [('debugger.tcss', '.'), ('*.toml', '.')]
-binaries = []
+binaries = [('/home/ericandr/.local/bin/textual-web', '.')]
 hiddenimports = []
 hiddenimports += collect_submodules('textual.widgets')
 tmp_ret = collect_all('sentry_sdk')
