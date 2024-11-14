@@ -200,7 +200,8 @@ def cli(verbose, version, update, no_update, command, web, internal_textual):
             path_to_toml = path.join(bundle_dir, 'terminal.toml')
 
         # run "textual-web --config serve.toml"
-        subprocess.run(["textual-web", "--config", path_to_toml])
+        path_to_tw = path.join(bundle_dir, 'textual-web')
+        subprocess.run([path_to_tw, "--config", path_to_toml])
 
     else:
         main(cmd, verbose)

@@ -19,6 +19,8 @@ fi
 # textual-web path
 tw_path=~/.local/bin/textual-web
 
+echo "textual-web path: $tw_path"
+
 # check if --clean flag is passed
 if [[ $* == *--clean* ]]; then
     pyinstaller --onefile --name debugger --add-data "debugger.tcss:." --add-data "*.toml:." --collect-submodules textual.widgets --collect-all sentry_sdk --collect-all textual-web --add-binary "$tw_path:." --clean main.py
