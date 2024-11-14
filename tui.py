@@ -15,10 +15,11 @@ import os
 import json
 import click
 import time
+import sys
 
 from settings import Globals, SettingsWidget
 from variables import VariableDisplayList, VariableDisplay
-from make import MakeTargets, MakeTarget, load_makefile
+from make import MakeTargets, MakeTarget, load_makefile, RunInDebugger
 from codeview import CodeWidget
 from ucli import UCLI
 
@@ -486,7 +487,7 @@ class SIMVApp(App):
         """Log data from the make target."""
         self.query_one("#log").write(message.data)
 
-    def on_make_target_run_in_debugger(self, event: MakeTarget.RunInDebugger) -> None:
+    def on_run_in_debugger(self, event: RunInDebugger) -> None:
         """Run the make target in the visual debugger."""
         self.query_one("#log").write(f"Running {event.target}\n")
 
@@ -498,5 +499,25 @@ class SIMVApp(App):
 
 
 if __name__ == "__main__":
-    app = SIMVApp(None, verbose=True)
+    cmd = None
+    if len(sys.argv) > 1:
+        command = sys.argv[1:]
+        cmd = " ".join(command)
+        # add "-ucli -suppress=ASLR_DETECTED_INFO -ucli2Proc" to the command
+        cmd += " -ucli -suppress=ASLR_DETECTED_INFO -ucli2Proc"
+    else:
+        # try to load the command from the settings
+        if os.path.exists(".settings.json"):
+            with open(".settings.json", "r") as f:
+                try:
+                    settings = json.load(f)
+                except json.JSONDecodeError:
+                    settings = {}
+        else:
+            settings = {}
+        
+        cmd = settings.get("cmd", None)
+        if cmd == "":
+            cmd = None
+    app = SIMVApp(cmd, verbose=True)
     app.run()

@@ -1,0 +1,3 @@
+[terminal.Debugger]
+command = "./debugger"
+slug = "debugger"

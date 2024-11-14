@@ -18,9 +18,9 @@ fi
 
 # check if --clean flag is passed
 if [[ $* == *--clean* ]]; then
-    pyinstaller --onefile --name debugger --add-data "debugger.tcss:." --clean --collect-submodules textual.widgets --collect-all sentry_sdk main.py
+    pyinstaller --onefile --name debugger --add-data "debugger.tcss:." --add-data "*.toml:." --collect-submodules textual.widgets --collect-all sentry_sdk --collect-all textual-web --clean main.py
 else
-    pyinstaller --onefile --name debugger --add-data "debugger.tcss:." --collect-submodules textual.widgets --collect-all sentry_sdk main.py
+    pyinstaller --onefile --name debugger --add-data "debugger.tcss:." --add-data "*.toml:." --collect-submodules textual.widgets --collect-all sentry_sdk --collect-all textual-web main.py
 fi
 
 cp dist/debugger .

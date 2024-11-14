@@ -63,6 +63,10 @@ async def load_makefile():
     resp = [target for target in targets if target and not target.endswith("%")]
     return resp
 
+class RunInDebugger(Message):
+    def __init__(self, target: str):
+        super().__init__()
+        self.target = target
 class MakeTarget(Widget):
     """Widget to show a make target that can be run and run it"""
 
@@ -70,11 +74,6 @@ class MakeTarget(Widget):
         def __init__(self, data: str):
             super().__init__()
             self.data = data
-
-    class RunInDebugger(Message):
-        def __init__(self, target: str):
-            super().__init__()
-            self.target = target
 
     def __init__(self, target: str, id=None):
         super().__init__(id=id)
@@ -147,7 +146,7 @@ class MakeTarget(Widget):
             self.post_message(self.LogData(f"Running {self.target} in the visual debugger..."))
             # TODO: can we compile the simv first and then run it in the debugger?
             # use make -n to get the commands that would be run
-            self.post_message(self.RunInDebugger(f"./build/{self.target.replace('.out', '.simv')}"))
+            self.post_message(RunInDebugger(f"./build/{self.target.replace('.out', '.simv')}"))
 
             for button in self.query(Button):
                 button.disabled = False
@@ -174,14 +173,18 @@ class MakeTargets(Widget):
         yield Label("Make Targets")
         yield Static("Click a make target to run it. If the target ends in \".out\", it will run in the visual debugger.")
 
-        if len(self.makefile_targets) == 0:
-            with ScrollableContainer():
-                yield Label("No make targets found")
-        else:
-            with ScrollableContainer():
-                for target in self.makefile_targets:
-                    yield MakeTarget(target)
-                    # yield MakeTarget(target, id=target.replace(" ", "_").replace(".", "_dot_"))
+        with ScrollableContainer():
+            yield Input(placeholder="./build/r10k.simv +MEMORY=programs/mem/r10k.mem +OUTPUT=output/r10k")
+            for target in self.makefile_targets:
+                yield MakeTarget(target)
+                # yield MakeTarget(target, id=target.replace(" ", "_").replace(".", "_dot_"))
+    
+    def on_input_submitted(self, event: Input.Changed):
+        # save the input value
+        self.post_message(RunInDebugger(f"{event.value}"))
+        # clear the input
+        for input in self.query(Input):
+            input.value = ""
 
 if __name__ == "__main__":
     # print the make commands that can be run

@@ -1,8 +1,13 @@
 from tui import SIMVApp
 import sys
 import os
+from os import path
 import requests
 import click
+import json
+import subprocess
+import selectors
+import time
 
 import sentry_sdk
 
@@ -17,7 +22,7 @@ sentry_sdk.init(
     profiles_sample_rate=1.0,
 )
 
-VERSION = "v1.0.20"
+VERSION = "v1.0.21"
 
 def main(cmd, verbose=False):
     """Main function to run the UCLI and TUI together."""
@@ -117,8 +122,11 @@ def check_version(check=False):
 @click.option("--version", is_flag=True, help="Print the version of the debugger.")
 @click.option("--update", "-u", is_flag=True, help="Check for updates and update if available.")
 @click.option("--no-update", is_flag=True, help="Do not check for updates.")
+@click.option("--web", "-w", is_flag=True, default=False, help="Forward the debugger UI to a public URL.")
+# @click.option("--term", "-t", is_flag=True, default=False, help="Forward the terminal to a public URL. Can be combined with --web.")
+@click.option("--internal-textual", is_flag=True, default=False, help="Do not use this flag manually.")
 @click.argument("command", nargs=-1)
-def cli(verbose, version, update, no_update, command):
+def cli(verbose, version, update, no_update, command, web, internal_textual):
     """Debugger for the simv simulator.
     
     COMMAND is the simv file to run with the debugger, followed by any arguments to pass to the simv executable. It can be omitted if you want to run the debugger without a simv executable.
@@ -127,18 +135,76 @@ def cli(verbose, version, update, no_update, command):
     debugger ./build/test1.simv +MEMORY=programs/mem/test_1.mem +OUTPUT=output/test
     """
 
+    term = False
+
+    if internal_textual:
+        # get command from settings
+        settings = {}
+        if os.path.exists(".settings.json"):
+            with open(".settings.json", "r") as f:
+                try:
+                    settings = json.load(f)
+                except json.JSONDecodeError:
+                    settings = {}
+        else:
+            settings = {}
+        
+        cmd = settings.get("cmd", None)
+        if cmd == "":
+            cmd = None
+        
+        print(f"Running debugger with command: {cmd}")
+        time.sleep(10)
+
+        main(cmd, verbose)
+
     check_version(version)
     updater(update, not no_update, verbose)
+
+    cmd = None
 
     if len(command) == 0:
         if verbose:
             click.secho("No simv executable specified", fg="black")
-        main(None, verbose)
     else:
         cmd = " ".join(command)
         # add "-ucli -suppress=ASLR_DETECTED_INFO -ucli2Proc" to the command
         cmd += " -ucli -suppress=ASLR_DETECTED_INFO -ucli2Proc"
+    
+    settings = ""
+    if os.path.exists(".settings.json"):
+        with open(".settings.json", "r") as f:
+            try:
+                settings = json.load(f)
+            except json.JSONDecodeError:
+                settings = {}
+    else:
+        settings = {}
+    
+    settings["cmd"] = cmd if cmd else ""
+
+    with open(".settings.json", "w") as f:
+        json.dump(settings, f, indent=4)
+    
+    if web or term:
+        bundle_dir = path.abspath(path.dirname(__file__))
+
+        if web and term:
+            click.echo("Running both web and term forwarding...")
+            path_to_toml = path.join(bundle_dir, 'both.toml')
+        elif web:
+            click.echo("Running web forwarding...")
+            path_to_toml = path.join(bundle_dir, 'debugger.toml')
+        elif term:
+            click.echo("Running term forwarding...")
+            path_to_toml = path.join(bundle_dir, 'terminal.toml')
+
+        # run "textual-web --config serve.toml"
+        subprocess.run(["textual-web", "--config", path_to_toml])
+
+    else:
         main(cmd, verbose)
+
     
     if verbose:
         click.secho("Exiting...", fg="black")

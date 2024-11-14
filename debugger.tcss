@@ -73,6 +73,12 @@ MakeTargets ScrollableContainer {
     padding: 1;
     margin-top: 2;
     content-align-horizontal: center;
+
+    Input {
+        width: 100%;
+        height: auto;
+        margin-bottom: 1;
+    }
 }
 
 MakeTarget {
