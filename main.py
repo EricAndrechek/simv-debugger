@@ -22,7 +22,7 @@ sentry_sdk.init(
     profiles_sample_rate=1.0,
 )
 
-VERSION = "v1.0.22"
+VERSION = "v1.0.23"
 
 def main(cmd, verbose=False):
     """Main function to run the UCLI and TUI together."""
