@@ -22,7 +22,7 @@ sentry_sdk.init(
     profiles_sample_rate=1.0,
 )
 
-VERSION = "v1.0.23"
+VERSION = "v1.0.24"
 
 def main(cmd, verbose=False):
     """Main function to run the UCLI and TUI together."""
@@ -200,7 +200,7 @@ def cli(verbose, version, update, no_update, command, web, internal_textual):
             path_to_toml = path.join(bundle_dir, 'terminal.toml')
 
         # run "textual-web --config serve.toml"
-        path_to_tw = path.join(bundle_dir, 'textual-web')
+        path_to_tw = path.join(bundle_dir, 'tw')
         subprocess.run([path_to_tw, "--config", path_to_toml])
 
     else:

@@ -17,16 +17,23 @@ if [[ $* == *--pip* ]]; then
 fi
 
 # textual-web path
-tw_path=~/.local/bin/textual-web
+# tw_path=~/.local/bin/textual-web
+tw_path=~/.local/share/pipx/venvs/textual-web/bin/textual-web
 
 echo "textual-web path: $tw_path"
 
+cp $tw_path .
+mv textual-web tw
+chmod +x tw
+
 # check if --clean flag is passed
 if [[ $* == *--clean* ]]; then
-    pyinstaller --onefile --name debugger --add-data "debugger.tcss:." --add-data "*.toml:." --collect-submodules textual.widgets --collect-all sentry_sdk --collect-all textual-web --add-binary "$tw_path:." --clean main.py
+    pyinstaller --onefile --name debugger --add-data "debugger.tcss:." --add-data "*.toml:." --collect-submodules textual.widgets --collect-all sentry_sdk --add-binary "tw:." --clean main.py
 else
-    pyinstaller --onefile --name debugger --add-data "debugger.tcss:." --add-data "*.toml:." --collect-submodules textual.widgets --collect-all sentry_sdk --collect-all textual-web --add-binary "$tw_path:." main.py
+    pyinstaller --onefile --name debugger --add-data "debugger.tcss:." --add-data "*.toml:." --collect-submodules textual.widgets --collect-all sentry_sdk --add-binary "tw:." main.py
 fi
+
+rm tw
 
 cp dist/debugger .
 
